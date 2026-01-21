@@ -2,6 +2,9 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
+  InternalServerErrorException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Brackets } from 'typeorm';
@@ -13,6 +16,7 @@ import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
   constructor(
     @InjectRepository(Task)
     private readonly tasksRepository: Repository<Task>,
@@ -21,22 +25,33 @@ export class TasksService {
   ) {}
 
   async create(createTaskDto: CreateTaskDto, userId: string) {
-    const task = this.tasksRepository.create({
-      ...createTaskDto,
-      userId,
-    });
+    try {
+      const task = this.tasksRepository.create({
+        ...createTaskDto,
+        userId,
+      });
 
-    const savedTask = await this.tasksRepository.save(task);
+      const savedTask = await this.tasksRepository.save(task);
+      this.logger.log(
+        `Tarea creada exitosamente: ${savedTask.id} por usuario ${userId}`,
+      );
 
-    // Registra el evento de creación de tarea con los datos proporcionados para cumplimiento de auditoría
-    await this.auditService.logAction(
-      userId,
-      'CREATE_TASK',
-      savedTask.id,
-      createTaskDto as unknown as Record<string, unknown>,
-    );
+      // Registra el evento de creación de tarea con los datos proporcionados para cumplimiento de auditoría
+      await this.auditService.logAction(
+        userId,
+        'CREATE_TASK',
+        savedTask.id,
+        createTaskDto as unknown as Record<string, unknown>,
+      );
 
-    return savedTask;
+      return savedTask;
+    } catch (error) {
+      this.logger.error(
+        `Error al crear tarea para usuario ${userId}: ${error instanceof Error ? error.message : 'Error desconocido'}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
   }
 
   async findAll(
@@ -218,9 +233,21 @@ export class TasksService {
         file: fileData,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Error al cargar archivo: ${errorMessage}`);
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(
+        `Error al cargar archivo para task ${id} por usuario ${userId}: ${msg}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      // Re-lanzar excepciones específicas para mantener el código HTTP correcto
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException(`Error al cargar archivo: ${msg}`);
     }
   }
 }

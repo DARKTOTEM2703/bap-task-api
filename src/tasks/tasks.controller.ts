@@ -21,6 +21,7 @@ import {
   ApiParam,
   ApiQuery,
   ApiConsumes,
+  ApiBody,
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TasksService } from './tasks.service';
@@ -322,9 +323,38 @@ export class TasksController {
     description: 'ID de la tarea',
     example: 1,
   })
+  @ApiBody({
+    description: 'Archivo para subir',
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Archivo (PDF, PNG o JPG, máximo 5MB)',
+        },
+      },
+      required: ['file'],
+    },
+  })
   @ApiResponse({
     status: 201,
     description: 'Archivo subido correctamente',
+    schema: {
+      properties: {
+        success: { type: 'boolean', example: true },
+        message: { type: 'string', example: 'Archivo subido exitosamente' },
+        file: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', example: 'https://minio:9000/tasks/...' },
+            filename: { type: 'string', example: 'documento.pdf' },
+            size: { type: 'number', example: 1024000 },
+            mimetype: { type: 'string', example: 'application/pdf' },
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 400,

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
@@ -23,6 +23,8 @@ interface ValidatedUser {
  */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
+  private readonly logger = new Logger(JwtStrategy.name);
+
   constructor(
     configService: ConfigService,
     private usersService: UsersService,
@@ -38,13 +40,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    * Valida el payload del token JWT
    * @param payload - Payload del token decodificado
    * @returns Usuario autenticado
+   * @throws UnauthorizedException si el usuario no existe
    */
-
   async validate(payload: JwtPayload): Promise<ValidatedUser> {
     const user = await this.usersService.findById(payload.sub);
+
     if (!user) {
-      throw new Error('Usuario no encontrado');
+      this.logger.warn(
+        `Intento de acceso con JWT para usuario inexistente: ${payload.sub}`,
+      );
+      throw new UnauthorizedException(
+        'Token inválido - Usuario no existe. Por favor inicia sesión nuevamente',
+      );
     }
+
     return { id: user.id, email: user.email, name: user.name };
   }
 }

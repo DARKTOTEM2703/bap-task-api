@@ -1,4 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import * as AWS from 'aws-sdk';
 import { ConfigService } from '@nestjs/config';
 
@@ -11,6 +16,7 @@ import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class StorageService {
   private s3: AWS.S3;
+  private readonly logger = new Logger(StorageService.name);
 
   constructor(private configService: ConfigService) {
     const accessKey = this.configService.get<string>('MINIO_ACCESS_KEY');
@@ -18,8 +24,9 @@ export class StorageService {
     const endpoint = this.configService.get<string>('MINIO_ENDPOINT');
 
     if (!accessKey || !secretKey || !endpoint) {
-      throw new Error(
-        'MinIO configuration is missing: MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_ENDPOINT are required',
+      this.logger.error('Configuración de MinIO incompleta');
+      throw new InternalServerErrorException(
+        'Configuración de MinIO incompleta: MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_ENDPOINT son requeridos',
       );
     }
 
@@ -44,14 +51,18 @@ export class StorageService {
 
     // Validar tamaño
     if (file.size > MAX_SIZE) {
-      throw new Error(
-        `El archivo excede el tamaño máximo de 5MB (actual: ${file.size / 1024 / 1024}MB)`,
+      throw new BadRequestException(
+        `El archivo excede el tamaño máximo de 5MB (actual: ${(
+          file.size /
+          1024 /
+          1024
+        ).toFixed(2)} MB)`,
       );
     }
 
     // Validar tipo MIME
     if (!ALLOWED_TYPES.includes(file.mimetype)) {
-      throw new Error(
+      throw new BadRequestException(
         `Formato no permitido. Formatos válidos: PDF, PNG, JPG (recibido: ${file.mimetype})`,
       );
     }
@@ -61,7 +72,7 @@ export class StorageService {
       .toLowerCase()
       .substring(file.originalname.lastIndexOf('.'));
     if (!ALLOWED_EXTENSIONS.includes(extension)) {
-      throw new Error(`Extensión no permitida: ${extension}`);
+      throw new BadRequestException(`Extensión no permitida: ${extension}`);
     }
 
     return true;
@@ -86,7 +97,10 @@ export class StorageService {
 
     const bucket = this.configService.get<string>('MINIO_BUCKET');
     if (!bucket) {
-      throw new Error('MINIO_BUCKET environment variable is required');
+      this.logger.error('MINIO_BUCKET no configurado');
+      throw new InternalServerErrorException(
+        'MINIO_BUCKET environment variable is required',
+      );
     }
 
     const timestamp = Date.now();
@@ -97,6 +111,7 @@ export class StorageService {
       try {
         await this.s3.headBucket({ Bucket: bucket }).promise();
       } catch {
+        this.logger.log(`Bucket ${bucket} no existe. Creando...`);
         await this.s3.createBucket({ Bucket: bucket }).promise();
       }
 
@@ -113,6 +128,7 @@ export class StorageService {
       };
 
       await this.s3.upload(params).promise();
+      this.logger.log(`Archivo subido a MinIO: ${bucket}/${filename}`);
 
       // Generar URL pública
       const endpoint = this.configService.get<string>('MINIO_ENDPOINT');
@@ -127,7 +143,13 @@ export class StorageService {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Error al subir archivo: ${errorMessage}`);
+      this.logger.error(
+        `Error al subir archivo: ${errorMessage}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new InternalServerErrorException(
+        `Error al subir archivo: ${errorMessage}`,
+      );
     }
   }
 
