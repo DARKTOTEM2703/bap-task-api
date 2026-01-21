@@ -1,0 +1,6 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "🔒 Verificando código y secretos..."
+npm run lint || (echo 'Lint failed — aborting commit' && exit 1)
+ggshield secret scan pre-commit || (echo 'Secrets found — aborting commit' && exit 1)

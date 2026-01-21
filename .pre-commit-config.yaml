@@ -1,0 +1,6 @@
+repos:
+  - repo: https://github.com/GitGuardian/gg-shield
+    rev: '' # use latest stable tag or pin a version
+    hooks:
+      - id: ggshield-secret-scan
+        args: ['--baseline', '.ggshield.baseline']
