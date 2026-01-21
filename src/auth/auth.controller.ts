@@ -1,23 +1,8 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-
-/**
- * DTO para Login
- */
-interface LoginDto {
-  email: string;
-  password: string;
-}
-
-/**
- * DTO para Registro
- */
-interface RegisterDto {
-  email: string;
-  password: string;
-  name: string;
-}
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 
 /**
  * Controlador de Autenticación
@@ -29,11 +14,6 @@ interface RegisterDto {
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  /**
-   * Registra un nuevo usuario
-   * @param registerDto - Credenciales del nuevo usuario
-   * @returns Token JWT y datos del usuario
-   */
   @Post('register')
   @ApiOperation({ summary: 'Registrar nuevo usuario' })
   @ApiResponse({

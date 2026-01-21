@@ -98,8 +98,9 @@ export class TasksController {
    * Obtiene una tarea específica por su ID.
    */
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.tasksService.findOne(+id);
+  @UseGuards(JwtAuthGuard)
+  findOne(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
+    return this.tasksService.findOne(+id, req.user?.id);
   }
 
   /**

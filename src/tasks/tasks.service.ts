@@ -114,9 +114,15 @@ export class TasksService {
     };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, userId?: string) {
     const task = await this.tasksRepository.findOneBy({ id });
     if (!task) throw new NotFoundException(`Task #${id} not found`);
+
+    // Validar acceso
+    if (!task.isPublic && userId && task.userId !== userId) {
+      throw new ForbiddenException('No tienes permiso para ver esta tarea');
+    }
+
     return task;
   }
 
