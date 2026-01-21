@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -27,14 +31,30 @@ export class TasksService {
       userId,
       'CREATE_TASK',
       savedTask.id,
-      createTaskDto,
+      createTaskDto as unknown as Record<string, unknown>,
     );
 
     return savedTask;
   }
 
-  async findAll() {
-    return await this.tasksRepository.find();
+  async findAll(userId: string, page = 1, limit = 10) {
+    const skip = (page - 1) * limit;
+
+    // Mostrar tareas propias + tareas públicas de otros
+    const [tasks, total] = await this.tasksRepository.findAndCount({
+      where: [{ userId }, { isPublic: true }],
+      skip,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
+
+    return {
+      data: tasks,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findOne(id: number) {
@@ -44,17 +64,32 @@ export class TasksService {
   }
 
   async update(id: number, updateTaskDto: UpdateTaskDto, userId: string) {
-    await this.findOne(id); // Valida existencia
+    const task = await this.findOne(id); // Valida existencia
+
+    // Validar que el usuario sea el propietario
+    if (task.userId !== userId) {
+      throw new ForbiddenException('You can only update your own tasks');
+    }
 
     await this.tasksRepository.update(id, updateTaskDto);
 
-    await this.auditService.logAction(userId, 'UPDATE_TASK', id, updateTaskDto);
+    await this.auditService.logAction(
+      userId,
+      'UPDATE_TASK',
+      id,
+      updateTaskDto as unknown as Record<string, unknown>,
+    );
 
     return await this.findOne(id);
   }
 
   async remove(id: number, userId: string) {
     const task = await this.findOne(id); // Valida existencia y obtiene datos para el log
+
+    // Validar que el usuario sea el propietario
+    if (task.userId !== userId) {
+      throw new ForbiddenException('You can only delete your own tasks');
+    }
 
     await this.tasksRepository.delete(id);
 
