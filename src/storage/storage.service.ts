@@ -4,7 +4,13 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import * as AWS from 'aws-sdk';
+import {
+  S3Client,
+  HeadBucketCommand,
+  CreateBucketCommand,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
 import { ConfigService } from '@nestjs/config';
 
 /**
@@ -12,10 +18,11 @@ import { ConfigService } from '@nestjs/config';
  *
  * Gestiona la carga de archivos en MinIO (compatible con S3).
  * Valida tamaño máximo (5MB) y formatos permitidos (.pdf, .png, .jpg).
+ * Utiliza AWS SDK v3 para operaciones S3.
  */
 @Injectable()
 export class StorageService {
-  private s3: AWS.S3;
+  private s3Client: S3Client;
   private readonly logger = new Logger(StorageService.name);
 
   constructor(private configService: ConfigService) {
@@ -24,18 +31,20 @@ export class StorageService {
     const endpoint = this.configService.get<string>('MINIO_ENDPOINT');
 
     if (!accessKey || !secretKey || !endpoint) {
-      this.logger.error('Configuración de MinIO incompleta');
+      this.logger.error('MinIO configuration incomplete');
       throw new InternalServerErrorException(
-        'Configuración de MinIO incompleta: MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_ENDPOINT son requeridos',
+        'MinIO configuration incomplete: MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_ENDPOINT are required',
       );
     }
 
-    this.s3 = new AWS.S3({
-      accessKeyId: accessKey,
-      secretAccessKey: secretKey,
+    this.s3Client = new S3Client({
+      region: 'us-east-1',
       endpoint: endpoint,
-      s3ForcePathStyle: true,
-      signatureVersion: 'v4',
+      credentials: {
+        accessKeyId: accessKey,
+        secretAccessKey: secretKey,
+      },
+      forcePathStyle: true,
     });
   }
 
@@ -107,30 +116,34 @@ export class StorageService {
     const filename = `tasks/${taskId}/${timestamp}-${file.originalname}`;
 
     try {
-      // Crear bucket si no existe
+      // Ensure bucket exists
       try {
-        await this.s3.headBucket({ Bucket: bucket }).promise();
+        await this.s3Client.send(
+          new HeadBucketCommand({ Bucket: bucket }),
+        );
       } catch {
-        this.logger.log(`Bucket ${bucket} no existe. Creando...`);
-        await this.s3.createBucket({ Bucket: bucket }).promise();
+        this.logger.log(`Bucket ${bucket} does not exist. Creating...`);
+        await this.s3Client.send(
+          new CreateBucketCommand({ Bucket: bucket }),
+        );
       }
 
-      // Subir archivo
-      const params = {
-        Bucket: bucket,
-        Key: filename,
-        Body: file.buffer,
-        ContentType: file.mimetype,
-        Metadata: {
-          'task-id': taskId.toString(),
-          'uploaded-at': new Date().toISOString(),
-        },
-      };
+      // Upload file to MinIO
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: filename,
+          Body: file.buffer,
+          ContentType: file.mimetype,
+          Metadata: {
+            'task-id': taskId.toString(),
+            'uploaded-at': new Date().toISOString(),
+          },
+        }),
+      );
+      this.logger.log(`File uploaded to MinIO: ${bucket}/${filename}`);
 
-      await this.s3.upload(params).promise();
-      this.logger.log(`Archivo subido a MinIO: ${bucket}/${filename}`);
-
-      // Generar URL pública
+      // Generate public URL
       const endpoint = this.configService.get<string>('MINIO_ENDPOINT');
       const url = `${endpoint}/${bucket}/${filename}`;
 
@@ -144,11 +157,11 @@ export class StorageService {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(
-        `Error al subir archivo: ${errorMessage}`,
+        `Error uploading file: ${errorMessage}`,
         error instanceof Error ? error.stack : undefined,
       );
       throw new InternalServerErrorException(
-        `Error al subir archivo: ${errorMessage}`,
+        `Error uploading file: ${errorMessage}`,
       );
     }
   }
@@ -156,20 +169,30 @@ export class StorageService {
   async deleteFile(fileKey: string): Promise<void> {
     const bucket = this.configService.get<string>('MINIO_BUCKET');
     if (!bucket) {
-      throw new Error('MINIO_BUCKET environment variable is required');
+      this.logger.error('MINIO_BUCKET not configured');
+      throw new InternalServerErrorException(
+        'MINIO_BUCKET environment variable is required',
+      );
     }
 
     try {
-      const params = {
-        Bucket: bucket,
-        Key: fileKey,
-      };
-
-      await this.s3.deleteObject(params).promise();
+      await this.s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: bucket,
+          Key: fileKey,
+        }),
+      );
+      this.logger.log(`File deleted from MinIO: ${bucket}/${fileKey}`);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Error al eliminar archivo: ${errorMessage}`);
+      this.logger.error(
+        `Error deleting file: ${errorMessage}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new InternalServerErrorException(
+        `Error deleting file: ${errorMessage}`,
+      );
     }
   }
 }
