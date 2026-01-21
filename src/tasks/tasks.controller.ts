@@ -13,7 +13,15 @@ import {
   BadRequestException,
   Request,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+  ApiConsumes,
+} from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -46,6 +54,33 @@ export class TasksController {
    * Crea una nueva tarea para el usuario autenticado.
    */
   @Post()
+  @ApiOperation({
+    summary: 'Crear nueva tarea',
+    description:
+      'Crea una tarea privada o pública según el usuario especifique',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Tarea creada exitosamente',
+    example: {
+      id: 1,
+      title: 'Mi tarea',
+      description: 'Descripción de la tarea',
+      status: 'PENDING',
+      deliveryDate: '2026-02-15',
+      isPublic: false,
+      userId: 'uuid-user',
+      createdAt: '2026-01-21T12:00:00Z',
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Datos inválidos en la solicitud',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'No autorizado - falta JWT válido',
+  })
   create(
     @Body() createTaskDto: CreateTaskDto,
     @Request() req: AuthenticatedRequest,
@@ -70,6 +105,78 @@ export class TasksController {
    * - orderDirection: ASC o DESC
    */
   @Get()
+  @ApiOperation({
+    summary: 'Listar tareas con paginación y filtros',
+    description:
+      'Obtiene todas las tareas del usuario actual (privadas) más todas las tareas públicas de otros usuarios. Soporta paginación, filtrado y ordenamiento.',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Número de página (default: 1)',
+    example: 1,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Resultados por página (default: 10)',
+    example: 10,
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    type: String,
+    description: 'Filtrar por estado',
+    enum: ['PENDING', 'IN_PROGRESS', 'DONE'],
+  })
+  @ApiQuery({
+    name: 'responsible',
+    required: false,
+    type: String,
+    description: 'Filtrar por responsable',
+  })
+  @ApiQuery({
+    name: 'startDate',
+    required: false,
+    type: String,
+    description: 'Fecha inicial (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'endDate',
+    required: false,
+    type: String,
+    description: 'Fecha final (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'tags',
+    required: false,
+    type: String,
+    description: 'Filtrar por tags (separados por comas)',
+  })
+  @ApiQuery({
+    name: 'orderBy',
+    required: false,
+    type: String,
+    description: 'Campo para ordenar',
+    enum: ['createdAt', 'deliveryDate', 'status', 'title', 'updatedAt'],
+  })
+  @ApiQuery({
+    name: 'orderDirection',
+    required: false,
+    type: String,
+    description: 'Dirección de orden',
+    enum: ['ASC', 'DESC'],
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de tareas obtenida correctamente',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'No autorizado',
+  })
   findAll(
     @Request() req: AuthenticatedRequest,
     @Query('page') page = 1,
@@ -101,6 +208,29 @@ export class TasksController {
    * Obtiene una tarea específica por su ID.
    */
   @Get(':id')
+  @ApiOperation({
+    summary: 'Obtener tarea por ID',
+    description:
+      'Obtiene los detalles completos de una tarea. Solo el propietario puede ver tareas privadas.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: Number,
+    description: 'ID de la tarea',
+    example: 1,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Tarea obtenida correctamente',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Tarea no encontrada',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'No tienes permiso para ver esta tarea privada',
+  })
   findOne(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     return this.tasksService.findOne(+id, req.user?.id);
   }
@@ -110,6 +240,29 @@ export class TasksController {
    * Actualiza completamente una tarea. Solo el propietario de la tarea privada o cualquiera para pública.
    */
   @Put(':id')
+  @ApiOperation({
+    summary: 'Actualizar tarea',
+    description:
+      'Actualiza una tarea. Solo el propietario puede editar tareas privadas.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: Number,
+    description: 'ID de la tarea',
+    example: 1,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Tarea actualizada correctamente',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Tarea no encontrada',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'No tienes permiso para editar esta tarea',
+  })
   update(
     @Param('id') id: string,
     @Body() updateTaskDto: UpdateTaskDto,
@@ -123,6 +276,29 @@ export class TasksController {
    * Elimina una tarea del sistema. Solo el propietario de la tarea privada o cualquiera para pública.
    */
   @Delete(':id')
+  @ApiOperation({
+    summary: 'Eliminar tarea',
+    description:
+      'Elimina una tarea permanentemente. Solo el propietario puede eliminar tareas privadas.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: Number,
+    description: 'ID de la tarea',
+    example: 1,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Tarea eliminada exitosamente',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Tarea no encontrada',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'No tienes permiso para eliminar esta tarea',
+  })
   remove(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     return this.tasksService.remove(+id, req.user.id);
   }
@@ -134,6 +310,34 @@ export class TasksController {
    */
   @Post(':id/upload')
   @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({
+    summary: 'Subir archivo adjunto a tarea',
+    description:
+      'Carga un archivo (PDF, PNG, JPG max 5MB) a una tarea. Almacenado en MinIO.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({
+    name: 'id',
+    type: Number,
+    description: 'ID de la tarea',
+    example: 1,
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Archivo subido correctamente',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Archivo no proporcionado o formato inválido',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Tarea no encontrada',
+  })
+  @ApiResponse({
+    status: 413,
+    description: 'Archivo muy grande (máximo 5MB)',
+  })
   async uploadFile(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File | undefined,
