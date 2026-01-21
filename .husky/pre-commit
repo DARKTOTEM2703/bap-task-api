@@ -3,4 +3,4 @@
 
 echo "🔒 Verificando código y secretos..."
 npm run lint || (echo 'Lint failed — aborting commit' && exit 1)
-ggshield secret scan pre-commit || (echo 'Secrets found — aborting commit' && exit 1)
+/home/jafeth/.local/share/pipx/venvs/ggshield/bin/ggshield secret scan pre-commit || (echo 'Secrets found — aborting commit' && exit 1)
