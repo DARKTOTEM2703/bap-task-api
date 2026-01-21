@@ -6,23 +6,34 @@ import {
   Put,
   Param,
   Delete,
-  Headers,
   Query,
   UseInterceptors,
+  UseGuards,
   UploadedFile,
   BadRequestException,
+  Request,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+
+interface AuthenticatedRequest {
+  user: {
+    id: string;
+    email: string;
+    name: string;
+  };
+}
 
 /**
  * Controlador de Tareas
  *
  * Gestiona las solicitudes HTTP para operaciones de gestión de tareas. Implementa endpoints RESTful
- * para operaciones CRUD con extracción de contexto del usuario del encabezado 'x-user-id'.
+ * para operaciones CRUD con autenticación JWT.
  */
+@UseGuards(JwtAuthGuard)
 @Controller('tasks')
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
@@ -30,14 +41,13 @@ export class TasksController {
   /**
    * POST /tasks
    * Crea una nueva tarea para el usuario autenticado.
-   * La tarea se asigna al usuario especificado en el encabezado 'x-user-id'.
    */
   @Post()
   create(
     @Body() createTaskDto: CreateTaskDto,
-    @Headers('x-user-id') userId?: string,
+    @Request() req: AuthenticatedRequest,
   ) {
-    return this.tasksService.create(createTaskDto, userId ?? 'system');
+    return this.tasksService.create(createTaskDto, req.user.id);
   }
 
   /**
@@ -58,7 +68,7 @@ export class TasksController {
    */
   @Get()
   findAll(
-    @Headers('x-user-id') userId?: string,
+    @Request() req: AuthenticatedRequest,
     @Query('page') page = 1,
     @Query('limit') limit = 10,
     @Query('status') status?: string,
@@ -70,7 +80,7 @@ export class TasksController {
     @Query('orderDirection') orderDirection: 'ASC' | 'DESC' = 'DESC',
   ) {
     return this.tasksService.findAll(
-      userId ?? 'system',
+      req.user.id,
       +page,
       +limit,
       status,
@@ -94,40 +104,37 @@ export class TasksController {
 
   /**
    * PUT /tasks/:id
-   * Actualiza completamente una tarea. Solo el propietario de la tarea puede realizar esta operación.
-   * Devuelve ForbiddenException si el usuario no es el propietario de la tarea.
+   * Actualiza completamente una tarea. Solo el propietario de la tarea privada o cualquiera para pública.
    */
   @Put(':id')
   update(
     @Param('id') id: string,
     @Body() updateTaskDto: UpdateTaskDto,
-    @Headers('x-user-id') userId?: string,
+    @Request() req: AuthenticatedRequest,
   ) {
-    return this.tasksService.update(+id, updateTaskDto, userId ?? 'system');
+    return this.tasksService.update(+id, updateTaskDto, req.user.id);
   }
 
   /**
    * DELETE /tasks/:id
-   * Elimina una tarea del sistema. Solo el propietario de la tarea puede eliminar sus propias tareas.
-   * Devuelve ForbiddenException si el usuario no es el propietario de la tarea.
+   * Elimina una tarea del sistema. Solo el propietario de la tarea privada o cualquiera para pública.
    */
   @Delete(':id')
-  remove(@Param('id') id: string, @Headers('x-user-id') userId?: string) {
-    return this.tasksService.remove(+id, userId ?? 'system');
+  remove(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
+    return this.tasksService.remove(+id, req.user.id);
   }
 
   /**
    * POST /tasks/:id/upload
    * Carga un archivo adjunto a una tarea.
    * Solo soporta: PDF, PNG, JPG (máximo 5MB)
-   * Solo el propietario o cualquiera (si es pública) puede cargar archivos.
    */
   @Post(':id/upload')
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File | undefined,
-    @Headers('x-user-id') userId?: string,
+    @Request() req: AuthenticatedRequest,
   ): Promise<{
     success: boolean;
     message: string;
@@ -137,6 +144,6 @@ export class TasksController {
       throw new BadRequestException('No se proporcionó archivo');
     }
 
-    return this.tasksService.uploadFile(+id, file, userId ?? 'system');
+    return this.tasksService.uploadFile(+id, file, req.user.id);
   }
 }

@@ -7,8 +7,11 @@ import { AppService } from './app.service';
 import { TasksModule } from './tasks/tasks.module';
 import { AuditModule } from './audit/audit.module';
 import { StorageModule } from './storage/storage.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
 import { Task } from './tasks/entities/task.entity';
 import { AuditLog } from './audit/entities/audit.entity';
+import { User } from './users/entities/user.entity';
 
 @Module({
   imports: [
@@ -22,6 +25,7 @@ import { AuditLog } from './audit/entities/audit.entity';
         DB_PASS: Joi.string().required(),
         DB_NAME: Joi.string().required(),
         TYPEORM_SYNC: Joi.boolean().default(true),
+        JWT_SECRET: Joi.string().default('your-secret-key'),
       }),
     }),
     TypeOrmModule.forRootAsync({
@@ -33,7 +37,7 @@ import { AuditLog } from './audit/entities/audit.entity';
         username: config.get<string>('DB_USER'),
         password: config.get<string>('DB_PASS'),
         database: config.get<string>('DB_NAME'),
-        entities: [Task, AuditLog],
+        entities: [Task, AuditLog, User],
         synchronize: config.get<boolean>('TYPEORM_SYNC'),
       }),
       inject: [ConfigService],
@@ -41,6 +45,8 @@ import { AuditLog } from './audit/entities/audit.entity';
     TasksModule,
     AuditModule,
     StorageModule,
+    AuthModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
