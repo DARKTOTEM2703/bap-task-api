@@ -1,87 +1,216 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# API de Gestión de Tareas
 
-## Descripción
+Sistema REST para gestión de tareas con autenticación por usuario, auditoría completa y control de acceso basado en roles.
 
-API REST para un Sistema de Gestión de Tareas.  
-Desarrollado con NestJS siguiendo una arquitectura modular y escalable, con prácticas de DevSecOps y documentación automática.
+## 🚀 Características
 
-Permite gestión completa de tareas (CRUD), asignación de responsables, auditoría de cambios y validación de datos.
+- ✅ CRUD completo de tareas (Crear, Leer, Actualizar, Eliminar)
+- ✅ Paginación en listados con metadatos
+- ✅ Control de acceso: cada usuario solo ve sus tareas + tareas públicas
+- ✅ Tareas públicas/privadas configurable
+- ✅ Registro de auditoría de todos los cambios
+- ✅ Validación robusta de entrada con class-validator
+- ✅ Documentación interactiva con Swagger/OpenAPI
+- ✅ Escaneo de secretos con ggshield
+- ✅ Base de datos MySQL con TypeORM
+- ✅ Docker Compose para desarrollo
 
-## Stack tecnológico
+## 📋 Requisitos Previos
 
-* Framework: NestJS (Node.js)
-* Lenguaje: TypeScript
-* Base de datos: MySQL 8
-* ORM: TypeORM
-* Contenedores: Docker & Docker Compose
-* Documentación: Swagger (OpenAPI)
-* Seguridad:
-  * Husky: Git hooks para validación local.
-  * ggshield / GitGuardian: escaneo de secretos.
-  * GitHub Actions: CI/CD con auditoría de seguridad.
+- **Node.js** >= 16.x
+- **npm** >= 8.x
+- **Docker** y **Docker Compose** (para la base de datos)
+- **Git**
 
----
+## 🔧 Instalación
 
-## Configuración del proyecto
+### 1. Clonar el repositorio
 
-### 1. Instalación de dependencias
+```bash
+git clone https://github.com/DARKTOTEM2703/bap-task-api.git
+cd bap-task-api
+```
+
+### 2. Instalar dependencias
+
 ```bash
 npm install
 ```
 
-### 2. Variables de entorno
-Copia el archivo de ejemplo y configura tus credenciales (Base de Datos, JWT, etc.):
+### 3. Configurar variables de entorno
+
+Crear archivo `.env` en la raíz del proyecto:
+
 ```bash
-cp .env.example .env
+# Base de datos
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=bap_user
+DB_PASS=bap_password
+DB_NAME=tasks_db
+
+# TypeORM
+TYPEORM_SYNC=true
+
+# MySQL Container
+MYSQL_ROOT_PASSWORD=root_password
+MYSQL_DATABASE=tasks_db
+MYSQL_USER=bap_user
+MYSQL_PASSWORD=bap_password
 ```
 
-### 3. Levantar infraestructura (Base de datos)
+### 4. Levantar la base de datos
+
 ```bash
 docker-compose up -d
 ```
 
-Ejecución
-```bash
-# Modo desarrollo (hot-reload)
-npm run start:dev
+### 5. Ejecutar la aplicación
 
-# Modo producción
+#### Modo desarrollo:
+```bash
+npm run start:dev
+```
+
+#### Modo producción:
+```bash
+npm run build
 npm run start:prod
 ```
 
-Una vez iniciada la aplicación, puedes acceder a:
-- API: http://localhost:3000
-- Documentación Swagger: http://localhost:3000/api
+La aplicación estará disponible en: `http://localhost:3000`
 
-## Tests
-```bash
-# Unit tests
-npm run test
+## 📚 Documentación API
 
-# E2E tests
-npm run test:e2e
+### Swagger/OpenAPI
 
-# Test coverage
-npm run test:cov
+Acceder a la documentación interactiva en:
+```
+http://localhost:3000/api
 ```
 
-## Estrategia de seguridad (DevSecOps)
+### Endpoints disponibles
 
-Se implementa una estrategia de defensa en profundidad para la gestión de secretos:
+#### 1. Crear Tarea (POST)
+```bash
+curl -X POST http://localhost:3000/tasks \
+  -H "Content-Type: application/json" \
+  -H "x-user-id: usuario-123" \
+  -d '{
+    "title": "Implementar autenticación",
+    "description": "Agregar JWT tokens al sistema",
+    "deliveryDate": "2026-02-15",
+    "status": "PENDING",
+    "isPublic": false
+  }'
+```
 
-Shift-left (local):
-* Husky ejecuta hooks de pre-commit.
-* ggshield escanea archivos antes de cada commit para evitar subir credenciales.
-* Instalación de hooks: `npm run prepare`
+#### 2. Obtener todas las tareas (GET)
+```bash
+curl -X GET "http://localhost:3000/tasks?page=1&limit=10" \
+  -H "x-user-id: usuario-123"
+```
 
-CI/CD (remoto):
-* Workflow en GitHub Actions que escanea el repositorio en cada push o pull request buscando vulnerabilidades o secretos expuestos.
+#### 3. Obtener una tarea específica (GET)
+```bash
+curl -X GET http://localhost:3000/tasks/1
+```
 
-## Autor
-Jafeth Gamboa  
-Desarrollador Full Stack
+#### 4. Actualizar una tarea (PUT)
+```bash
+curl -X PUT http://localhost:3000/tasks/1 \
+  -H "Content-Type: application/json" \
+  -H "x-user-id: usuario-123" \
+  -d '{
+    "status": "IN_PROGRESS",
+    "comments": "Iniciado desarrollo"
+  }'
+```
 
-## Licencia
+#### 5. Eliminar una tarea (DELETE)
+```bash
+curl -X DELETE http://localhost:3000/tasks/1 \
+  -H "x-user-id: usuario-123"
+```
+
+## 📊 Estructura del Proyecto
+
+```
+src/
+├── app.controller.ts         # Controlador raíz
+├── app.module.ts             # Módulo raíz (configuración DB)
+├── app.service.ts            # Servicio raíz
+├── main.ts                   # Punto de entrada
+├── tasks/                    # Módulo de tareas
+│   ├── dto/
+│   │   ├── create-task.dto.ts
+│   │   └── update-task.dto.ts
+│   ├── entities/
+│   │   └── task.entity.ts
+│   ├── tasks.controller.ts
+│   ├── tasks.service.ts
+│   └── tasks.module.ts
+└── audit/                    # Módulo de auditoría
+    ├── entities/
+    │   └── audit.entity.ts
+    ├── audit.service.ts
+    └── audit.module.ts
+```
+
+## 🔐 Seguridad
+
+### Autenticación
+
+Utiliza header `x-user-id` para identificar el usuario:
+```
+x-user-id: usuario-123
+```
+
+### Autorización
+
+- ✅ Los usuarios solo pueden modificar/eliminar sus propias tareas
+- ✅ Las tareas públicas (`isPublic: true`) son visibles para todos
+- ✅ Retorna `403 Forbidden` en intentos no autorizados
+
+### Escaneo de Secretos
+
+El proyecto usa **ggshield** y **Husky** para prevenir commits con secretos.
+
+## 📦 Scripts Disponibles
+
+```bash
+npm run start:dev      # Desarrollo con hot reload
+npm run start          # Modo normal
+npm run build          # Build para producción
+npm run start:prod     # Producción
+npm run test           # Tests unitarios
+npm run test:e2e       # Tests E2E
+npm run lint           # ESLint + fix automático
+```
+
+## 🗄️ Modelos de Datos
+
+### Tabla: `tasks`
+- id, title, description, status, deliveryDate
+- comments, responsible, tags, isPublic, userId
+- createdAt, updatedAt
+
+### Tabla: `audit_logs`
+- id, userId, action, taskId, details, timestamp
+
+## 📚 Stack Tecnológico
+
+- **NestJS** 11.x
+- **TypeScript** 5.x
+- **TypeORM** 0.3.x
+- **MySQL** 8.0
+- **Swagger** 7.x
+- **Docker** Compose
+
+## 📧 Repositorio
+
+GitHub: https://github.com/DARKTOTEM2703/bap-task-api
+
+## 📄 Licencia
+
 MIT

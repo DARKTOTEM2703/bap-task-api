@@ -71,6 +71,26 @@ export class Task {
   @Column()
   userId: string;
 
+  /**
+   * URL pública del archivo adjunto (opcional).
+   * Almacenado en MinIO/S3.
+   * Formatos permitidos: PDF, PNG, JPG. Máximo 5MB.
+   */
+  @Column({ nullable: true })
+  fileUrl?: string;
+
+  /**
+   * Nombre original del archivo subido.
+   */
+  @Column({ nullable: true })
+  fileName?: string;
+
+  /**
+   * Ruta del archivo en MinIO para gestión interna.
+   */
+  @Column({ nullable: true })
+  fileKey?: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

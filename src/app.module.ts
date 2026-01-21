@@ -6,6 +6,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TasksModule } from './tasks/tasks.module';
 import { AuditModule } from './audit/audit.module';
+import { StorageModule } from './storage/storage.module';
 import { Task } from './tasks/entities/task.entity';
 import { AuditLog } from './audit/entities/audit.entity';
 
@@ -39,6 +40,7 @@ import { AuditLog } from './audit/entities/audit.entity';
     }),
     TasksModule,
     AuditModule,
+    StorageModule,
   ],
   controllers: [AppController],
   providers: [AppService],
