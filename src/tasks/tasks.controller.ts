@@ -13,6 +13,7 @@ import {
   BadRequestException,
   Request,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -33,6 +34,8 @@ interface AuthenticatedRequest {
  * Gestiona las solicitudes HTTP para operaciones de gestión de tareas. Implementa endpoints RESTful
  * para operaciones CRUD con autenticación JWT.
  */
+@ApiTags('tasks')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('tasks')
 export class TasksController {
@@ -98,7 +101,6 @@ export class TasksController {
    * Obtiene una tarea específica por su ID.
    */
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
   findOne(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     return this.tasksService.findOne(+id, req.user?.id);
   }
