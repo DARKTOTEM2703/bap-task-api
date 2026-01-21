@@ -6,6 +6,15 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+/**
+ * TaskStatus Enumeration
+ *
+ * Defines the lifecycle states for task management.
+ * - OPEN: Initial state
+ * - PENDING: Task is queued and awaiting execution
+ * - IN_PROGRESS: Task is currently being worked on
+ * - DONE: Task has been completed
+ */
 export enum TaskStatus {
   OPEN = 'OPEN',
   PENDING = 'PENDING',
@@ -40,16 +49,27 @@ export class Task {
   @Column({ nullable: true })
   responsible: string;
 
+  /**
+   * Array of tags for task categorization and filtering.
+   * Uses simple-array column type for comma-separated storage.
+   */
   @Column('simple-array', { nullable: true })
   tags: string[];
 
-  // --- RETO EXTRA ---
+  /**
+   * Visibility flag determining task accessibility.
+   * When true, task is visible to all users; when false, only visible to task owner.
+   * Required for role-based access control implementation (Optional requirement).
+   */
   @Column({ default: false })
   isPublic: boolean;
 
+  /**
+   * User identifier that establishes task ownership.
+   * Extracted from 'x-user-id' header to enforce resource-level authorization.
+   */
   @Column()
-  userId: string; // El dueño de la tarea
-  // ------------------
+  userId: string;
 
   @CreateDateColumn()
   createdAt: Date;

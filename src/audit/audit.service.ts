@@ -3,6 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditLog } from './entities/audit.entity';
 
+/**
+ * AuditService
+ *
+ * Manages audit logging operations for compliance and forensic purposes.
+ * Provides CRUD operations for audit log entries and specialized method for recording task mutations.
+ */
 @Injectable()
 export class AuditService {
   constructor(
@@ -33,11 +39,16 @@ export class AuditService {
   }
 
   /**
-   * Registra una acción en la bitácora de auditoría.
-   * @param userId ID del usuario que realiza la acción.
-   * @param action Tipo de acción realizada (ej. CREATE_TASK).
-   * @param taskId ID de la tarea afectada.
-   * @param details Objeto opcional con detalles adicionales (se guardará como JSON).
+   * logAction - Records an action in the audit log
+   *
+   * Centralizes audit logging for all task mutations (CREATE, UPDATE, DELETE) to maintain
+   * an immutable record of system events for compliance, debugging, and forensic analysis.
+   *
+   * @param userId - Identifier of the user performing the action (extracted from x-user-id header)
+   * @param action - Type of action performed (CREATE_TASK, UPDATE_TASK, DELETE_TASK, etc.)
+   * @param taskId - ID of the task affected by this action
+   * @param details - Optional object containing contextual information about the action payload
+   *                  (automatically serialized to JSON by the audit_logs table)
    */
   async logAction(
     userId: string,
