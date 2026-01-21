@@ -40,7 +40,7 @@ export class Task {
   })
   status: TaskStatus;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: 'datetime', nullable: true })
   deliveryDate: Date;
 
   @Column({ nullable: true })
