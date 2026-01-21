@@ -26,6 +26,10 @@ import { User } from './users/entities/user.entity';
         DB_NAME: Joi.string().required(),
         TYPEORM_SYNC: Joi.boolean().default(true),
         JWT_SECRET: Joi.string().default('your-secret-key'),
+        MINIO_ENDPOINT: Joi.string().required(),
+        MINIO_ACCESS_KEY: Joi.string().required(),
+        MINIO_SECRET_KEY: Joi.string().required(),
+        MINIO_BUCKET: Joi.string().required(),
       }),
     }),
     TypeOrmModule.forRootAsync({

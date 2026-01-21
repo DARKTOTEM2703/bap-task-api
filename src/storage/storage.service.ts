@@ -13,12 +13,20 @@ export class StorageService {
   private s3: AWS.S3;
 
   constructor(private configService: ConfigService) {
+    const accessKey = this.configService.get<string>('MINIO_ACCESS_KEY');
+    const secretKey = this.configService.get<string>('MINIO_SECRET_KEY');
+    const endpoint = this.configService.get<string>('MINIO_ENDPOINT');
+
+    if (!accessKey || !secretKey || !endpoint) {
+      throw new Error(
+        'MinIO configuration is missing: MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_ENDPOINT are required',
+      );
+    }
+
     this.s3 = new AWS.S3({
-      accessKeyId: this.configService.get('MINIO_ACCESS_KEY') || 'minioadmin',
-      secretAccessKey:
-        this.configService.get('MINIO_SECRET_KEY') || 'minioadmin',
-      endpoint:
-        this.configService.get('MINIO_ENDPOINT') || 'http://localhost:9000',
+      accessKeyId: accessKey,
+      secretAccessKey: secretKey,
+      endpoint: endpoint,
       s3ForcePathStyle: true,
       signatureVersion: 'v4',
     });
@@ -76,8 +84,11 @@ export class StorageService {
   }> {
     this.validateFile(file);
 
-    const bucket =
-      this.configService.get<string>('MINIO_BUCKET') || 'tasks-files';
+    const bucket = this.configService.get<string>('MINIO_BUCKET');
+    if (!bucket) {
+      throw new Error('MINIO_BUCKET environment variable is required');
+    }
+
     const timestamp = Date.now();
     const filename = `tasks/${taskId}/${timestamp}-${file.originalname}`;
 
@@ -104,9 +115,7 @@ export class StorageService {
       await this.s3.upload(params).promise();
 
       // Generar URL pública
-      const endpoint =
-        this.configService.get<string>('MINIO_ENDPOINT') ||
-        'http://localhost:9000';
+      const endpoint = this.configService.get<string>('MINIO_ENDPOINT');
       const url = `${endpoint}/${bucket}/${filename}`;
 
       return {
@@ -122,13 +131,11 @@ export class StorageService {
     }
   }
 
-  /**
-   * Elimina un archivo de MinIO
-   * @param fileKey - Clave del archivo (ruta en MinIO)
-   */
   async deleteFile(fileKey: string): Promise<void> {
-    const bucket =
-      this.configService.get<string>('MINIO_BUCKET') || 'tasks-files';
+    const bucket = this.configService.get<string>('MINIO_BUCKET');
+    if (!bucket) {
+      throw new Error('MINIO_BUCKET environment variable is required');
+    }
 
     try {
       const params = {
