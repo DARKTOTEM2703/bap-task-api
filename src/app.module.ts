@@ -24,7 +24,7 @@ import { User } from './users/entities/user.entity';
         DB_USER: Joi.string().required(),
         DB_PASS: Joi.string().required(),
         DB_NAME: Joi.string().required(),
-        TYPEORM_SYNC: Joi.boolean().default(true),
+        TYPEORM_SYNC: Joi.boolean().default(false),
         JWT_SECRET: Joi.string().min(32).required(),
         MINIO_ENDPOINT: Joi.string().required(),
         MINIO_ACCESS_KEY: Joi.string().required(),
@@ -58,4 +58,4 @@ import { User } from './users/entities/user.entity';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }
