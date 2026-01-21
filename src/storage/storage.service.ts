@@ -118,14 +118,10 @@ export class StorageService {
     try {
       // Ensure bucket exists
       try {
-        await this.s3Client.send(
-          new HeadBucketCommand({ Bucket: bucket }),
-        );
+        await this.s3Client.send(new HeadBucketCommand({ Bucket: bucket }));
       } catch {
         this.logger.log(`Bucket ${bucket} does not exist. Creating...`);
-        await this.s3Client.send(
-          new CreateBucketCommand({ Bucket: bucket }),
-        );
+        await this.s3Client.send(new CreateBucketCommand({ Bucket: bucket }));
       }
 
       // Upload file to MinIO
