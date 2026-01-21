@@ -4,7 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Brackets } from 'typeorm';
+import { Repository } from 'typeorm';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { Task } from './entities/task.entity';
@@ -39,93 +39,17 @@ export class TasksService {
     return savedTask;
   }
 
-  async findAll(
-    userId: string,
-    page = 1,
-    limit = 10,
-    status?: string,
-    startDate?: string,
-    endDate?: string,
-    responsible?: string,
-    tags?: string,
-    orderBy = 'createdAt',
-    orderDirection: 'ASC' | 'DESC' = 'DESC',
-  ) {
+  async findAll(userId: string, page = 1, limit = 10) {
     const skip = (page - 1) * limit;
 
-    // Construir condiciones de filtrado
-    const whereConditions: any[] = [];
-    const userTasks = { userId };
-    const publicTasks = { isPublic: true };
-
-    // Aplicar filtros a ambas categorías (propias y públicas)
-    if (status) {
-      userTasks['status'] = status;
-      publicTasks['status'] = status;
-    }
-
-    if (responsible) {
-      userTasks['responsible'] = responsible;
-      publicTasks['responsible'] = responsible;
-    }
-
-    whereConditions.push(userTasks, publicTasks);
-
-    // Construir opciones de consulta
-    const queryBuilder = this.tasksRepository.createQueryBuilder('task').where(
-      new Brackets((qb) => {
-        qb.where('task.userId = :userId', { userId }).orWhere(
-          'task.isPublic = :isPublic',
-          { isPublic: true },
-        );
-      }),
-    );
-
-    // Filtro por status
-    if (status) {
-      queryBuilder.andWhere('task.status = :status', { status });
-    }
-
-    // Filtro por responsible
-    if (responsible) {
-      queryBuilder.andWhere('task.responsible = :responsible', { responsible });
-    }
-
-    // Filtro por rango de fechas de entrega
-    if (startDate) {
-      queryBuilder.andWhere('task.deliveryDate >= :startDate', {
-        startDate: new Date(startDate),
-      });
-    }
-    if (endDate) {
-      queryBuilder.andWhere('task.deliveryDate <= :endDate', {
-        endDate: new Date(endDate),
-      });
-    }
-
-    // Filtro por tags
-    if (tags) {
-      const tagsArray = tags.split(',').map((t) => t.trim());
-      queryBuilder.andWhere('task.tags && :tags', { tags: tagsArray });
-    }
-
-    // Ordenamiento
-    const validOrderFields = [
-      'createdAt',
-      'deliveryDate',
-      'status',
-      'title',
-      'updatedAt',
-    ];
-    const orderField = validOrderFields.includes(orderBy)
-      ? orderBy
-      : 'createdAt';
-    queryBuilder.orderBy(`task.${orderField}`, orderDirection);
-
-    // Paginación
-    queryBuilder.skip(skip).take(limit);
-
-    const [tasks, total] = await queryBuilder.getManyAndCount();
+    // Obtiene resultados paginados: tareas privadas del usuario combinadas con todas las tareas públicas de otros usuarios
+    // Implementa el modelo de visibilidad basado en roles donde los usuarios pueden ver sus propias tareas y cualquier tarea pública
+    const [tasks, total] = await this.tasksRepository.findAndCount({
+      where: [{ userId }, { isPublic: true }],
+      skip,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
 
     return {
       data: tasks,
@@ -133,17 +57,6 @@ export class TasksService {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
-      filters: {
-        status: status || null,
-        responsible: responsible || null,
-        startDate: startDate || null,
-        endDate: endDate || null,
-        tags: tags || null,
-      },
-      sorting: {
-        orderBy: orderField,
-        orderDirection,
-      },
     };
   }
 
@@ -156,13 +69,9 @@ export class TasksService {
   async update(id: number, updateTaskDto: UpdateTaskDto, userId: string) {
     const task = await this.findOne(id);
 
-    // Valida la autorización:
-    // - Si la tarea es privada, solo el propietario puede editarla
-    // - Si la tarea es pública, cualquiera puede editarla
-    if (!task.isPublic && task.userId !== userId) {
-      throw new ForbiddenException(
-        'Solo el propietario puede editar tareas privadas',
-      );
+    // Valida la propiedad del recurso: verifica que el usuario solicitante sea el propietario de la tarea antes de permitir modificaciones
+    if (task.userId !== userId) {
+      throw new ForbiddenException('Solo puedes actualizar tus propias tareas');
     }
 
     await this.tasksRepository.update(id, updateTaskDto);
@@ -181,13 +90,9 @@ export class TasksService {
   async remove(id: number, userId: string) {
     const task = await this.findOne(id);
 
-    // Valida la autorización para eliminación:
-    // - Si la tarea es privada, solo el propietario puede eliminarla
-    // - Si la tarea es pública, cualquiera puede eliminarla
-    if (!task.isPublic && task.userId !== userId) {
-      throw new ForbiddenException(
-        'Solo el propietario puede eliminar tareas privadas',
-      );
+    // Valida la propiedad del recurso: verifica la propiedad de la tarea antes de la eliminación para prevenir eliminaciones no autorizadas
+    if (task.userId !== userId) {
+      throw new ForbiddenException('Solo puedes eliminar tus propias tareas');
     }
 
     await this.tasksRepository.delete(id);

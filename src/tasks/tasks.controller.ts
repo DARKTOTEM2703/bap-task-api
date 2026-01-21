@@ -144,6 +144,6 @@ export class TasksController {
       throw new BadRequestException('No se proporcionó archivo');
     }
 
-    return this.tasksService.uploadFile(+id, file, req.user.id);
+    return await this.tasksService.uploadFile(+id, file, req.user.id);
   }
 }
