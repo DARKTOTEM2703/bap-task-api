@@ -1,22 +1,27 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+} from 'typeorm';
 
 @Entity('audit_logs') // Así se llamará la tabla en MySQL
 export class AuditLog {
-    @PrimaryGeneratedColumn()
-    id: number;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-    @Column()
-    userId: string; // El 'x-user-id' del header
+  @Column()
+  userId: string; // El 'x-user-id' del header
 
-    @Column()
-    action: string; // Ej: 'CREATE', 'UPDATE', 'DELETE'
+  @Column()
+  action: string; // Ej: 'CREATE', 'UPDATE', 'DELETE'
 
-    @Column()
-    taskId: number; // ID de la tarea afectada
+  @Column()
+  taskId: number; // ID de la tarea afectada
 
-    @Column({ type: 'text', nullable: true })
-    details: string; // JSON con los datos (opcional)
+  @Column({ type: 'json', nullable: true })
+  details: Record<string, any> | null;
 
-    @CreateDateColumn()
-    timestamp: Date; // Se llena sola automáticamente
+  @CreateDateColumn()
+  timestamp: Date; // Se llena sola automáticamente
 }
