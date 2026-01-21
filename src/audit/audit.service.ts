@@ -4,10 +4,10 @@ import { Repository } from 'typeorm';
 import { AuditLog } from './entities/audit.entity';
 
 /**
- * AuditService
+ * Servicio de Auditoría
  *
- * Manages audit logging operations for compliance and forensic purposes.
- * Provides CRUD operations for audit log entries and specialized method for recording task mutations.
+ * Gestiona operaciones de registro de auditoría para cumplimiento normativo y propósitos forenses.
+ * Proporciona operaciones CRUD para entradas de registro de auditoría y método especializado para registrar mutaciones de tareas.
  */
 @Injectable()
 export class AuditService {
@@ -39,16 +39,16 @@ export class AuditService {
   }
 
   /**
-   * logAction - Records an action in the audit log
+   * logAction - Registra una acción en el registro de auditoría
    *
-   * Centralizes audit logging for all task mutations (CREATE, UPDATE, DELETE) to maintain
-   * an immutable record of system events for compliance, debugging, and forensic analysis.
+   * Centraliza el registro de auditoría para todas las mutaciones de tareas (CREAR, ACTUALIZAR, ELIMINAR) para mantener
+   * un registro inmutable de eventos del sistema para cumplimiento normativo, depuración y análisis forense.
    *
-   * @param userId - Identifier of the user performing the action (extracted from x-user-id header)
-   * @param action - Type of action performed (CREATE_TASK, UPDATE_TASK, DELETE_TASK, etc.)
-   * @param taskId - ID of the task affected by this action
-   * @param details - Optional object containing contextual information about the action payload
-   *                  (automatically serialized to JSON by the audit_logs table)
+   * @param userId - Identificador del usuario que realiza la acción (extraído del encabezado x-user-id)
+   * @param action - Tipo de acción realizada (CREATE_TASK, UPDATE_TASK, DELETE_TASK, etc.)
+   * @param taskId - ID de la tarea afectada por esta acción
+   * @param details - Objeto opcional que contiene información contextual sobre la carga útil de la acción
+   *                  (serializado automáticamente a JSON por la tabla audit_logs)
    */
   async logAction(
     userId: string,

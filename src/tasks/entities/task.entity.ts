@@ -7,13 +7,13 @@ import {
 } from 'typeorm';
 
 /**
- * TaskStatus Enumeration
+ * Enumeración de Estados de Tarea
  *
- * Defines the lifecycle states for task management.
- * - OPEN: Initial state
- * - PENDING: Task is queued and awaiting execution
- * - IN_PROGRESS: Task is currently being worked on
- * - DONE: Task has been completed
+ * Define los estados del ciclo de vida para la gestión de tareas.
+ * - OPEN: Estado inicial
+ * - PENDING: Tarea en cola esperando ejecución
+ * - IN_PROGRESS: Tarea se está siendo trabajada actualmente
+ * - DONE: Tarea ha sido completada
  */
 export enum TaskStatus {
   OPEN = 'OPEN',
@@ -50,23 +50,23 @@ export class Task {
   responsible: string;
 
   /**
-   * Array of tags for task categorization and filtering.
-   * Uses simple-array column type for comma-separated storage.
+   * Array de etiquetas para categorización y filtrado de tareas.
+   * Utiliza el tipo de columna simple-array para almacenamiento separado por comas.
    */
   @Column('simple-array', { nullable: true })
   tags: string[];
 
   /**
-   * Visibility flag determining task accessibility.
-   * When true, task is visible to all users; when false, only visible to task owner.
-   * Required for role-based access control implementation (Optional requirement).
+   * Bandera de visibilidad que determina la accesibilidad de la tarea.
+   * Cuando es verdadero, la tarea es visible para todos los usuarios; cuando es falso, solo es visible para el propietario.
+   * Requerido para implementación de control de acceso basado en roles (requisito opcional).
    */
   @Column({ default: false })
   isPublic: boolean;
 
   /**
-   * User identifier that establishes task ownership.
-   * Extracted from 'x-user-id' header to enforce resource-level authorization.
+   * Identificador del usuario que establece la propiedad de la tarea.
+   * Extraído del encabezado 'x-user-id' para aplicar autorización a nivel de recurso.
    */
   @Column()
   userId: string;
@@ -77,9 +77,3 @@ export class Task {
   @UpdateDateColumn()
   updatedAt: Date;
 }
-
-/*Este archivo define la entidad Task para la base de datos, 
-incluyendo campos como título, descripción, estado, fecha de entrega, 
-comentarios, responsable, etiquetas, visibilidad pública, 
-y el ID del usuario propietario. También incluye marcas de tiempo 
-para creación y actualización. */

@@ -26,7 +26,7 @@ export class TasksService {
 
     const savedTask = await this.tasksRepository.save(task);
 
-    // Log the task creation event with the provided payload for audit trail compliance
+    // Registra el evento de creación de tarea con los datos proporcionados para cumplimiento de auditoría
     await this.auditService.logAction(
       userId,
       'CREATE_TASK',
@@ -40,8 +40,8 @@ export class TasksService {
   async findAll(userId: string, page = 1, limit = 10) {
     const skip = (page - 1) * limit;
 
-    // Retrieve paginated results: user's private tasks combined with all public tasks from other users
-    // This implements the role-based visibility model where users can see their own tasks and any public tasks
+    // Obtiene resultados paginados: tareas privadas del usuario combinadas con todas las tareas públicas de otros usuarios
+    // Implementa el modelo de visibilidad basado en roles donde los usuarios pueden ver sus propias tareas y cualquier tarea pública
     const [tasks, total] = await this.tasksRepository.findAndCount({
       where: [{ userId }, { isPublic: true }],
       skip,
@@ -67,14 +67,14 @@ export class TasksService {
   async update(id: number, updateTaskDto: UpdateTaskDto, userId: string) {
     const task = await this.findOne(id);
 
-    // Enforce resource ownership: verify that the requesting user is the task owner before allowing modifications
+    // Valida la propiedad del recurso: verifica que el usuario solicitante sea el propietario de la tarea antes de permitir modificaciones
     if (task.userId !== userId) {
-      throw new ForbiddenException('You can only update your own tasks');
+      throw new ForbiddenException('Solo puedes actualizar tus propias tareas');
     }
 
     await this.tasksRepository.update(id, updateTaskDto);
 
-    // Record the update operation in the audit log for compliance and debugging purposes
+    // Registra la operación de actualización en el registro de auditoría para cumplimiento normativo y propósitos de depuración
     await this.auditService.logAction(
       userId,
       'UPDATE_TASK',
@@ -88,18 +88,18 @@ export class TasksService {
   async remove(id: number, userId: string) {
     const task = await this.findOne(id);
 
-    // Enforce resource ownership: verify task ownership before deletion to prevent unauthorized deletions
+    // Valida la propiedad del recurso: verifica la propiedad de la tarea antes de la eliminación para prevenir eliminaciones no autorizadas
     if (task.userId !== userId) {
-      throw new ForbiddenException('You can only delete your own tasks');
+      throw new ForbiddenException('Solo puedes eliminar tus propias tareas');
     }
 
     await this.tasksRepository.delete(id);
 
-    // Record the deletion event with relevant task metadata for historical tracking
+    // Registra el evento de eliminación con metadatos relevantes de la tarea para seguimiento histórico
     await this.auditService.logAction(userId, 'DELETE_TASK', id, {
       title: task.title,
     });
 
-    return { message: 'Task deleted successfully' };
+    return { message: 'Tarea eliminada exitosamente' };
   }
 }

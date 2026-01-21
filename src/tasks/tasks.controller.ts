@@ -14,10 +14,10 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 
 /**
- * TasksController
+ * Controlador de Tareas
  *
- * Handles HTTP requests for task management operations. Implements RESTful endpoints
- * for CRUD operations with user context extraction from the 'x-user-id' header.
+ * Gestiona las solicitudes HTTP para operaciones de gestión de tareas. Implementa endpoints RESTful
+ * para operaciones CRUD con extracción de contexto del usuario del encabezado 'x-user-id'.
  */
 @Controller('tasks')
 export class TasksController {
@@ -25,8 +25,8 @@ export class TasksController {
 
   /**
    * POST /tasks
-   * Creates a new task for the authenticated user.
-   * The task is assigned to the user specified in the 'x-user-id' header.
+   * Crea una nueva tarea para el usuario autenticado.
+   * La tarea se asigna al usuario especificado en el encabezado 'x-user-id'.
    */
   @Post()
   create(
@@ -38,8 +38,8 @@ export class TasksController {
 
   /**
    * GET /tasks
-   * Retrieves paginated list of tasks visible to the user (own tasks + public tasks from others).
-   * Supports pagination via query parameters.
+   * Obtiene una lista paginada de tareas visibles para el usuario (tareas propias + tareas públicas de otros).
+   * Soporta paginación a través de parámetros de consulta.
    */
   @Get()
   findAll(
@@ -52,7 +52,7 @@ export class TasksController {
 
   /**
    * GET /tasks/:id
-   * Retrieves a specific task by its ID.
+   * Obtiene una tarea específica por su ID.
    */
   @Get(':id')
   findOne(@Param('id') id: string) {
@@ -61,8 +61,8 @@ export class TasksController {
 
   /**
    * PATCH /tasks/:id
-   * Updates a task with partial modifications. Only the task owner can perform this operation.
-   * Returns ForbiddenException if user is not the task owner.
+   * Actualiza una tarea con modificaciones parciales. Solo el propietario de la tarea puede realizar esta operación.
+   * Devuelve ForbiddenException si el usuario no es el propietario de la tarea.
    */
   @Patch(':id')
   update(
@@ -75,8 +75,8 @@ export class TasksController {
 
   /**
    * DELETE /tasks/:id
-   * Removes a task from the system. Only the task owner can delete their own tasks.
-   * Returns ForbiddenException if user is not the task owner.
+   * Elimina una tarea del sistema. Solo el propietario de la tarea puede eliminar sus propias tareas.
+   * Devuelve ForbiddenException si el usuario no es el propietario de la tarea.
    */
   @Delete(':id')
   remove(@Param('id') id: string, @Headers('x-user-id') userId?: string) {
