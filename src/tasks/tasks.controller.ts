@@ -24,6 +24,7 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -48,7 +49,7 @@ interface AuthenticatedRequest {
 @UseGuards(JwtAuthGuard)
 @Controller('tasks')
 export class TasksController {
-  constructor(private readonly tasksService: TasksService) {}
+  constructor(private readonly tasksService: TasksService) { }
 
   /**
    * POST /tasks
@@ -308,9 +309,35 @@ export class TasksController {
    * POST /tasks/:id/upload
    * Carga un archivo adjunto a una tarea.
    * Solo soporta: PDF, PNG, JPG (máximo 5MB)
+   * El límite de tamaño se valida en Multer ANTES de cargar completamente
    */
   @Post(':id/upload')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      // Limitar a 5MB (5 * 1024 * 1024 bytes)
+      limits: {
+        fileSize: 5 * 1024 * 1024,
+      },
+      // Filtro de archivos permitidos
+      fileFilter: (req, file, callback) => {
+        const allowedMimes = ['application/pdf', 'image/png', 'image/jpeg'];
+        const allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg'];
+
+        const extension = file.originalname
+          .toLowerCase()
+          .substring(file.originalname.lastIndexOf('.'));
+
+        if (!allowedMimes.includes(file.mimetype) || !allowedExtensions.includes(extension)) {
+          callback(new BadRequestException(
+            `Formato no permitido. Solo se permiten: PDF, PNG, JPG. Recibido: ${file.mimetype}`
+          ), false);
+        } else {
+          callback(null, true);
+        }
+      },
+    }),
+  )
   @ApiOperation({
     summary: 'Subir archivo adjunto a tarea',
     description:
@@ -379,6 +406,21 @@ export class TasksController {
   }> {
     if (!file) {
       throw new BadRequestException('No se proporcionó archivo');
+    }
+
+    /**
+     * Validación adicional de tamaño (protección en dos niveles)
+     * Nivel 1: Express middleware (5MB)
+     * Nivel 2: Multer (5MB)
+     * Nivel 3: Esta validación explícita
+     */
+    const MAX_SIZE_MB = 5;
+    const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+
+    if (file.size > MAX_SIZE_BYTES) {
+      throw new BadRequestException(
+        `Archivo demasiado grande: ${(file.size / 1024 / 1024).toFixed(2)}MB (máximo ${MAX_SIZE_MB}MB)`,
+      );
     }
 
     return await this.tasksService.uploadFile(+id, file, req.user.id);

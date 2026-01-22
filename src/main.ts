@@ -2,10 +2,19 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe, Logger } from '@nestjs/common';
+import * as express from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const logger = new Logger('Bootstrap');
+
+  /**
+   * Límite global de tamaño de payload para proteger el servidor
+   * Rechaza requests >5MB ANTES de procesarlas
+   * Evita que se tumbe el servidor con archivos grandes
+   */
+  app.use(express.json({ limit: '5mb' }));
+  app.use(express.urlencoded({ limit: '5mb', extended: true }));
 
   // ✅ AGREGAR CORS CONFIGURATION
   app.enableCors({

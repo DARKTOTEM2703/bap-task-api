@@ -1,6 +1,5 @@
 import {
   Injectable,
-  BadRequestException,
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
@@ -56,43 +55,11 @@ export class StorageService {
   }
 
   /**
-   * Valida que el archivo cumpla con los requisitos
-   * @param file - Archivo subido
-   * @returns true si es válido, lanza excepción si no
+   * Nota: La validación de archivo (tamaño, tipo MIME, extensión) se realiza
+   * en el FileInterceptor del controlador ANTES de llegar aquí, para evitar
+   * cargar archivos innecesariamente en memoria.
+   * Este método solo sube el archivo ya validado a MinIO.
    */
-  private validateFile(file: Express.Multer.File): boolean {
-    const MAX_SIZE = 5 * 1024 * 1024; // 5MB
-    const ALLOWED_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
-    const ALLOWED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg'];
-
-    // Validar tamaño
-    if (file.size > MAX_SIZE) {
-      throw new BadRequestException(
-        `El archivo excede el tamaño máximo de 5MB (actual: ${(
-          file.size /
-          1024 /
-          1024
-        ).toFixed(2)} MB)`,
-      );
-    }
-
-    // Validar tipo MIME
-    if (!ALLOWED_TYPES.includes(file.mimetype)) {
-      throw new BadRequestException(
-        `Formato no permitido. Formatos válidos: PDF, PNG, JPG (recibido: ${file.mimetype})`,
-      );
-    }
-
-    // Validar extensión
-    const extension = file.originalname
-      .toLowerCase()
-      .substring(file.originalname.lastIndexOf('.'));
-    if (!ALLOWED_EXTENSIONS.includes(extension)) {
-      throw new BadRequestException(`Extensión no permitida: ${extension}`);
-    }
-
-    return true;
-  }
 
   /**
    * Carga un archivo a MinIO usando streams
@@ -111,7 +78,7 @@ export class StorageService {
     size: number;
     mimetype: string;
   }> {
-    this.validateFile(file);
+    // Archivo ya fue validado por FileInterceptor en el controlador
 
     const bucket = this.configService.get<string>('MINIO_BUCKET');
     if (!bucket) {
