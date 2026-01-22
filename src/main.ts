@@ -16,7 +16,7 @@ async function bootstrap() {
   app.use(express.json({ limit: '5mb' }));
   app.use(express.urlencoded({ limit: '5mb', extended: true }));
 
-  // ✅ AGREGAR CORS CONFIGURATION
+  //  AGREGAR CORS CONFIGURATION
   app.enableCors({
     origin: process.env.ALLOWED_ORIGINS?.split(',') || [
       'http://localhost:3000',
@@ -50,9 +50,9 @@ async function bootstrap() {
   const port = Number(process.env.PORT);
   await app.listen(port);
 
-  logger.log(`🚀 Application running on http://localhost:${port}`);
+  logger.log(` Application running on http://localhost:${port}`);
   logger.log(
-    `📚 Swagger documentation available at http://localhost:${port}/api`,
+    ` Swagger documentation available at http://localhost:${port}/api`,
   );
 }
 void bootstrap();
