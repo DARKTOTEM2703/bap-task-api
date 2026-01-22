@@ -23,6 +23,7 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { Readable } from 'stream';
+import Busboy from 'busboy';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -57,78 +58,126 @@ export class TasksController {
     ALLOWED_EXTENSIONS: ['.pdf', '.png', '.jpg', '.jpeg'] as const,
   } as const;
 
-  constructor(private readonly tasksService: TasksService) {}
+  constructor(private readonly tasksService: TasksService) { }
 
   /**
    * Helper: Parse multipart form data to extract file buffer, filename and mimetype
+   * Usa busboy para parsear multipart/form-data de manera profesional
    */
-  private parseMultipartBuffer(buffer: Buffer): {
+  private parseMultipartBuffer(
+    buffer: Buffer,
+    contentType: string,
+  ): Promise<{
     fileBuffer: Buffer;
     filename: string;
     mimetype: string;
-  } {
+  }> {
     const logger = new Logger('TasksController.parseMultipartBuffer');
 
-    // Extract headers: filename and content-type
-    const headerMatch = buffer
-      .toString('utf8')
-      .match(/filename="([^"]*)"[^\n]*\r?\nContent-Type: ([^\r\n]+)/);
+    return new Promise((resolve, reject) => {
+      const bb = Busboy({ headers: { 'content-type': contentType } });
+      let fileBuffer: Buffer | null = null;
+      let filename = '';
+      let mimetype = '';
 
-    if (!headerMatch) {
-      throw new BadRequestException('No se encontró información del archivo');
-    }
+      bb.on('file', (fieldname, file, info) => {
+        if (fieldname !== 'file') {
+          file.resume(); // Ignorar campos que no sean 'file'
+          return;
+        }
 
-    const [, filename, mimetype] = headerMatch;
+        filename = info.filename;
+        mimetype = info.mimeType || 'application/octet-stream';
 
-    // Validate MIME type
-    if (
-      !this.FILE_VALIDATION.ALLOWED_MIMES.includes(
-        mimetype as (typeof this.FILE_VALIDATION.ALLOWED_MIMES)[number],
-      )
-    ) {
-      throw new BadRequestException(
-        `Formato no permitido. Solo se permiten: PDF, PNG, JPG. Recibido: ${mimetype}`,
-      );
-    }
+        // Validar MIME type
+        if (
+          !this.FILE_VALIDATION.ALLOWED_MIMES.includes(
+            mimetype as (typeof this.FILE_VALIDATION.ALLOWED_MIMES)[number],
+          )
+        ) {
+          file.resume();
+          reject(
+            new BadRequestException(
+              `Formato no permitido. Solo se permiten: PDF, PNG, JPG. Recibido: ${mimetype}`,
+            ),
+          );
+          return;
+        }
 
-    // Validate extension
-    const extension = filename
-      .toLowerCase()
-      .substring(filename.lastIndexOf('.'));
+        // Validar extensión
+        const extension = filename
+          .toLowerCase()
+          .substring(filename.lastIndexOf('.'));
 
-    if (
-      !this.FILE_VALIDATION.ALLOWED_EXTENSIONS.includes(
-        extension as (typeof this.FILE_VALIDATION.ALLOWED_EXTENSIONS)[number],
-      )
-    ) {
-      throw new BadRequestException(`Extensión no permitida: ${extension}`);
-    }
+        if (
+          !this.FILE_VALIDATION.ALLOWED_EXTENSIONS.includes(
+            extension as (typeof this.FILE_VALIDATION.ALLOWED_EXTENSIONS)[number],
+          )
+        ) {
+          file.resume();
+          reject(
+            new BadRequestException(`Extensión no permitida: ${extension}`),
+          );
+          return;
+        }
 
-    // Extract actual file content (without multipart headers)
-    const bodyMatch = buffer
-      .toString('binary')
-      .match(/\r?\n\r?\n([\s\S]*)\r?\n--/);
+        // Recolectar chunks del archivo
+        const chunks: Buffer[] = [];
+        file.on('data', (chunk: Buffer) => {
+          chunks.push(chunk);
+        });
 
-    if (!bodyMatch) {
-      throw new BadRequestException('No se pudo procesar el archivo');
-    }
+        file.on('end', () => {
+          fileBuffer = Buffer.concat(chunks);
 
-    const fileBuffer = Buffer.from(bodyMatch[1], 'binary');
+          // Validar tamaño final
+          if (fileBuffer.length > this.FILE_VALIDATION.MAX_SIZE_BYTES) {
+            reject(
+              new BadRequestException(
+                `Archivo demasiado grande: ${(
+                  fileBuffer.length /
+                  1024 /
+                  1024
+                ).toFixed(2)}MB (máximo 5MB)`,
+              ),
+            );
+            return;
+          }
+        });
 
-    // Final size validation
-    if (fileBuffer.length > this.FILE_VALIDATION.MAX_SIZE_BYTES) {
-      throw new BadRequestException(
-        `Archivo demasiado grande: ${(fileBuffer.length / 1024 / 1024).toFixed(
-          2,
-        )}MB (máximo 5MB)`,
-      );
-    }
+        file.on('error', (error: Error) => {
+          reject(
+            new BadRequestException(
+              `Error procesando archivo: ${error.message}`,
+            ),
+          );
+        });
+      });
 
-    logger.debug(
-      `Parsed multipart: ${filename} (${fileBuffer.length} bytes, ${mimetype})`,
-    );
+      bb.on('close', () => {
+        if (!fileBuffer) {
+          reject(new BadRequestException('No se encontró archivo'));
+          return;
+        }
 
-    return { fileBuffer, filename, mimetype };
+        logger.debug(
+          `Parsed multipart: ${filename} (${fileBuffer.length} bytes, ${mimetype})`,
+        );
+
+        resolve({ fileBuffer, filename, mimetype });
+      });
+
+      bb.on('error', (error: Error) => {
+        reject(
+          new BadRequestException(
+            `Error parseando multipart: ${error.message}`,
+          ),
+        );
+      });
+
+      bb.write(buffer);
+      bb.end();
+    });
   }
 
   /**
@@ -541,7 +590,7 @@ export class TasksController {
               fileBuffer,
               filename: parsedFilename,
               mimetype: parsedMimetype,
-            } = this.parseMultipartBuffer(buffer);
+            } = await this.parseMultipartBuffer(buffer, contentType || '');
 
             // Rename for clarity in this scope
             filename = parsedFilename;
