@@ -62,9 +62,11 @@ export class TasksController {
   /**
    * Helper: Parse multipart form data to extract file buffer, filename and mimetype
    */
-  private parseMultipartBuffer(
-    buffer: Buffer,
-  ): { fileBuffer: Buffer; filename: string; mimetype: string } {
+  private parseMultipartBuffer(buffer: Buffer): {
+    fileBuffer: Buffer;
+    filename: string;
+    mimetype: string;
+  } {
     const logger = new Logger('TasksController.parseMultipartBuffer');
 
     // Extract headers: filename and content-type
@@ -73,15 +75,17 @@ export class TasksController {
       .match(/filename="([^"]*)"[^\n]*\r?\nContent-Type: ([^\r\n]+)/);
 
     if (!headerMatch) {
-      throw new BadRequestException(
-        'No se encontró información del archivo',
-      );
+      throw new BadRequestException('No se encontró información del archivo');
     }
 
     const [, filename, mimetype] = headerMatch;
 
     // Validate MIME type
-    if (!this.FILE_VALIDATION.ALLOWED_MIMES.includes(mimetype as typeof this.FILE_VALIDATION.ALLOWED_MIMES[number])) {
+    if (
+      !this.FILE_VALIDATION.ALLOWED_MIMES.includes(
+        mimetype as (typeof this.FILE_VALIDATION.ALLOWED_MIMES)[number],
+      )
+    ) {
       throw new BadRequestException(
         `Formato no permitido. Solo se permiten: PDF, PNG, JPG. Recibido: ${mimetype}`,
       );
@@ -92,10 +96,12 @@ export class TasksController {
       .toLowerCase()
       .substring(filename.lastIndexOf('.'));
 
-    if (!this.FILE_VALIDATION.ALLOWED_EXTENSIONS.includes(extension as typeof this.FILE_VALIDATION.ALLOWED_EXTENSIONS[number])) {
-      throw new BadRequestException(
-        `Extensión no permitida: ${extension}`,
-      );
+    if (
+      !this.FILE_VALIDATION.ALLOWED_EXTENSIONS.includes(
+        extension as (typeof this.FILE_VALIDATION.ALLOWED_EXTENSIONS)[number],
+      )
+    ) {
+      throw new BadRequestException(`Extensión no permitida: ${extension}`);
     }
 
     // Extract actual file content (without multipart headers)
@@ -112,11 +118,9 @@ export class TasksController {
     // Final size validation
     if (fileBuffer.length > this.FILE_VALIDATION.MAX_SIZE_BYTES) {
       throw new BadRequestException(
-        `Archivo demasiado grande: ${(
-          fileBuffer.length /
-          1024 /
-          1024
-        ).toFixed(2)}MB (máximo 5MB)`,
+        `Archivo demasiado grande: ${(fileBuffer.length / 1024 / 1024).toFixed(
+          2,
+        )}MB (máximo 5MB)`,
       );
     }
 
@@ -469,7 +473,10 @@ export class TasksController {
     }
 
     // Validar Content-Length (primera capa)
-    if (contentLength && parseInt(contentLength) > this.FILE_VALIDATION.MAX_SIZE_BYTES) {
+    if (
+      contentLength &&
+      parseInt(contentLength) > this.FILE_VALIDATION.MAX_SIZE_BYTES
+    ) {
       throw new BadRequestException(
         `Archivo demasiado grande: ${(
           parseInt(contentLength) /
@@ -494,10 +501,8 @@ export class TasksController {
 
         // Validar tamaño mientras se recibe (segunda capa)
         if (totalSize > this.FILE_VALIDATION.MAX_SIZE_BYTES) {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
           req.pause();
 
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
           req.connection.destroy();
 
           logger.warn(
@@ -524,50 +529,53 @@ export class TasksController {
       /**
        * Cuando termina el stream
        */
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+
       req.on('end', () => {
         // Handle async operations without async in callback
-        (async () => {
+        void (async () => {
           try {
             const buffer = Buffer.concat(chunks);
 
             // Use helper to parse multipart and extract file data
-            const { fileBuffer, filename: parsedFilename, mimetype: parsedMimetype } =
-              this.parseMultipartBuffer(buffer);
+            const {
+              fileBuffer,
+              filename: parsedFilename,
+              mimetype: parsedMimetype,
+            } = this.parseMultipartBuffer(buffer);
 
             // Rename for clarity in this scope
             filename = parsedFilename;
             mimetype = parsedMimetype;
 
-          // Convertir a stream y subir
-          const fileStream = Readable.from(fileBuffer);
+            // Convertir a stream y subir
+            const fileStream = Readable.from(fileBuffer);
 
-          const result = await this.tasksService.uploadFileStream(
-            taskId,
-            fileStream,
-            filename,
-            mimetype,
-            req.user.id,
-          );
-
-          logger.log(
-            `Archivo subido exitosamente: ${filename} (${fileBuffer.length} bytes)`,
-          );
-
-          resolve({
-            success: true,
-            message: 'Archivo cargado exitosamente',
-            file: {
-              url: result.url,
-              filename: result.filename,
-              size: fileBuffer.length,
+            const result = await this.tasksService.uploadFileStream(
+              taskId,
+              fileStream,
+              filename,
               mimetype,
-            },
-          });
-        } catch (error) {
-          logger.error(`Error al procesar upload: ${error}`);
-          reject(error instanceof Error ? error : new Error(String(error)));
-        }
+              req.user.id,
+            );
+
+            logger.log(
+              `Archivo subido exitosamente: ${filename} (${fileBuffer.length} bytes)`,
+            );
+
+            resolve({
+              success: true,
+              message: 'Archivo cargado exitosamente',
+              file: {
+                url: result.url,
+                filename: result.filename,
+                size: fileBuffer.length,
+                mimetype,
+              },
+            });
+          } catch (error) {
+            logger.error(`Error al procesar upload: ${error}`);
+            reject(error instanceof Error ? error : new Error(String(error)));
+          }
         })();
       });
 
