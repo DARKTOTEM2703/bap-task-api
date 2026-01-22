@@ -58,7 +58,7 @@ export class TasksController {
     ALLOWED_EXTENSIONS: ['.pdf', '.png', '.jpg', '.jpeg'] as const,
   } as const;
 
-  constructor(private readonly tasksService: TasksService) { }
+  constructor(private readonly tasksService: TasksService) {}
 
   /**
    * Helper: Parse multipart form data to extract file buffer, filename and mimetype
