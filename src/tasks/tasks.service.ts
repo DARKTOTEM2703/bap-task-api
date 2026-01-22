@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Brackets } from 'typeorm';
+import { Readable } from 'stream';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { Task } from './entities/task.entity';
@@ -186,6 +187,7 @@ export class TasksService {
 
   /**
    * Carga un archivo adjunto a una tarea
+   * @deprecated Use uploadFileStream() instead
    * @param id - ID de la tarea
    * @param file - Archivo a cargar
    * @param userId - ID del usuario que carga el archivo
@@ -193,7 +195,7 @@ export class TasksService {
    */
   async uploadFile(
     id: number,
-    file: Express.Multer.File,
+    file: Buffer,
     userId: string,
   ): Promise<{
     success: boolean;
@@ -209,37 +211,70 @@ export class TasksService {
       );
     }
 
+    // Este método no se usa directamente. Usar uploadFileStream() en su lugar
+    throw new BadRequestException(
+      'Use POST /tasks/:id/upload endpoint with multipart/form-data instead',
+    );
+  }
+
+  /**
+   * Carga un archivo desde un stream directo a MinIO
+   * Más eficiente que uploadFile - sin buffer intermedio
+   * @param id - ID de la tarea
+   * @param stream - Stream del archivo
+   * @param filename - Nombre original del archivo
+   * @param mimetype - Tipo MIME del archivo
+   * @param userId - ID del usuario que carga el archivo
+   */
+  async uploadFileStream(
+    id: number,
+    stream: Readable,
+    filename: string,
+    mimetype: string,
+    userId: string,
+  ): Promise<{
+    url: string;
+    filename: string;
+  }> {
+    const task = await this.findOne(id);
+
+    // Validar autorización
+    if (!task.isPublic && task.userId !== userId) {
+      throw new ForbiddenException(
+        'No tienes permiso para cargar archivos en esta tarea',
+      );
+    }
+
     try {
-      // Subir archivo a MinIO
-      const fileData = await this.storageService.uploadFile(file, id);
+      // Subir stream directamente a MinIO
+      const fileData = await this.storageService.uploadFileStream(
+        stream,
+        filename,
+        mimetype,
+        id,
+      );
 
       // Actualizar tarea con datos del archivo
       await this.tasksRepository.update(id, {
         fileUrl: fileData.url,
-        fileName: fileData.filename,
-        fileKey: `tasks/${id}/${Date.now()}-${file.originalname}`,
+        fileName: filename,
+        fileKey: fileData.key,
       });
 
       // Registrar en auditoría
       await this.auditService.logAction(userId, 'UPLOAD_FILE', id, {
-        filename: fileData.filename,
-        size: fileData.size,
+        filename,
         url: fileData.url,
       });
 
-      return {
-        success: true,
-        message: 'Archivo cargado exitosamente',
-        file: fileData,
-      };
+      return fileData;
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(
-        `Error al cargar archivo para task ${id} por usuario ${userId}: ${msg}`,
+        `Error al cargar archivo stream para task ${id} por usuario ${userId}: ${msg}`,
         error instanceof Error ? error.stack : undefined,
       );
 
-      // Re-lanzar excepciones específicas para mantener el código HTTP correcto
       if (error instanceof BadRequestException) {
         throw error;
       }

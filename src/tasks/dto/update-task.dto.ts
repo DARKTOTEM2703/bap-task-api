@@ -134,7 +134,8 @@ export class UpdateTaskDto {
    * Visibilidad de la tarea (opcional)
    */
   @ApiProperty({
-    description: 'Si es true, visible para todos. Si es false, solo para el propietario',
+    description:
+      'Si es true, visible para todos. Si es false, solo para el propietario',
     example: false,
     type: Boolean,
     required: false,

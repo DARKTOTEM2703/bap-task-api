@@ -65,20 +65,24 @@ export class StorageService {
    * Carga un archivo a MinIO usando streams
    * Ventajas: Menor uso de memoria, mejor rendimiento para archivos grandes
    *
-   * @param file - Archivo a cargar (puede ser buffer o stream)
+   * @param file - Buffer del archivo
    * @param taskId - ID de la tarea asociada
+   * @param originalFilename - Nombre original del archivo
+   * @param mimeType - Tipo MIME del archivo
    * @returns Objeto con URL pública y metadatos del archivo
    */
   async uploadFile(
-    file: Express.Multer.File,
+    file: Buffer,
     taskId: number,
+    originalFilename: string,
+    mimeType: string,
   ): Promise<{
     url: string;
     filename: string;
     size: number;
     mimetype: string;
   }> {
-    // Archivo ya fue validado por FileInterceptor en el controlador
+    // Archivo ya fue validado en el controlador antes de llegar aquí
 
     const bucket = this.configService.get<string>('MINIO_BUCKET');
     if (!bucket) {
@@ -89,7 +93,7 @@ export class StorageService {
     }
 
     const timestamp = Date.now();
-    const filename = `tasks/${taskId}/${timestamp}-${file.originalname}`;
+    const filename = `tasks/${taskId}/${timestamp}-${originalFilename}`;
 
     try {
       // Ensure bucket exists
@@ -102,7 +106,7 @@ export class StorageService {
 
       // Convertir buffer a stream para upload eficiente
       // Esto permite que AWS SDK maneje el archivo en chunks
-      const stream = Readable.from(file.buffer);
+      const stream = Readable.from(file);
 
       // Usar Upload multipart de AWS SDK v3 para streams
       // Automáticamente divide en chunks y sube en paralelo
@@ -112,11 +116,11 @@ export class StorageService {
           Bucket: bucket,
           Key: filename,
           Body: stream,
-          ContentType: file.mimetype,
+          ContentType: mimeType,
           Metadata: {
             'task-id': taskId.toString(),
             'uploaded-at': new Date().toISOString(),
-            'original-name': file.originalname,
+            'original-name': originalFilename,
           },
         },
         // Configuración de chunks para optimizar el upload
@@ -149,9 +153,9 @@ export class StorageService {
 
       return {
         url,
-        filename: file.originalname,
-        size: file.size,
-        mimetype: file.mimetype,
+        filename: filename || 'archivo',
+        size: file.length,
+        mimetype: mimeType || 'application/octet-stream',
       };
     } catch (error) {
       const errorMessage =
@@ -198,6 +202,102 @@ export class StorageService {
       );
       throw new InternalServerErrorException(
         `Error deleting file: ${errorMessage}`,
+      );
+    }
+  }
+
+  /**
+   * Carga un archivo desde stream directo (sin buffer intermedio)
+   * Máxima eficiencia de memoria - ideal para archivos grandes
+   * @param stream - Stream del archivo
+   * @param filename - Nombre original del archivo
+   * @param mimetype - Tipo MIME del archivo
+   * @param taskId - ID de la tarea asociada
+   * @returns URL pública y key del archivo
+   */
+  async uploadFileStream(
+    stream: Readable,
+    filename: string,
+    mimetype: string,
+    taskId: number,
+  ): Promise<{
+    url: string;
+    key: string;
+    filename: string;
+  }> {
+    const bucket = this.configService.get<string>('MINIO_BUCKET');
+    if (!bucket) {
+      this.logger.error('MINIO_BUCKET no configurado');
+      throw new InternalServerErrorException(
+        'MINIO_BUCKET environment variable is required',
+      );
+    }
+
+    const timestamp = Date.now();
+    const fileKey = `tasks/${taskId}/${timestamp}-${filename}`;
+
+    try {
+      // Asegurar que el bucket existe
+      try {
+        await this.s3Client.send(new HeadBucketCommand({ Bucket: bucket }));
+      } catch {
+        this.logger.log(`Bucket ${bucket} does not exist. Creating...`);
+        await this.s3Client.send(new CreateBucketCommand({ Bucket: bucket }));
+      }
+
+      // Upload desde stream directo con Upload de AWS SDK
+      const upload = new Upload({
+        client: this.s3Client,
+        params: {
+          Bucket: bucket,
+          Key: fileKey,
+          Body: stream,
+          ContentType: mimetype,
+          Metadata: {
+            'task-id': taskId.toString(),
+            'uploaded-at': new Date().toISOString(),
+            'original-name': filename,
+          },
+        },
+        queueSize: 4,
+        partSize: 1024 * 1024 * 5, // 5MB chunks
+      });
+
+      // Monitorear progreso
+      upload.on('httpUploadProgress', (progress) => {
+        if (progress.loaded && progress.total) {
+          const percentage = ((progress.loaded / progress.total) * 100).toFixed(
+            2,
+          );
+          this.logger.debug(
+            `Stream upload progress: ${percentage}% (${progress.loaded}/${progress.total} bytes)`,
+          );
+        }
+      });
+
+      await upload.done();
+
+      this.logger.log(
+        `File uploaded from stream to MinIO: ${bucket}/${fileKey}`,
+      );
+
+      const endpoint = this.configService.get<string>('MINIO_ENDPOINT');
+      const url = `${endpoint}/${bucket}/${fileKey}`;
+
+      return {
+        url,
+        key: fileKey,
+        filename,
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(
+        `Error uploading file stream: ${errorMessage}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new InternalServerErrorException(
+        `Error uploading file: ${errorMessage}`,
       );
     }
   }

@@ -7,11 +7,10 @@ import {
   Param,
   Delete,
   Query,
-  UseInterceptors,
   UseGuards,
-  UploadedFile,
   BadRequestException,
   Request,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -23,8 +22,7 @@ import {
   ApiConsumes,
   ApiBody,
 } from '@nestjs/swagger';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
+import { Readable } from 'stream';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -38,18 +36,96 @@ interface AuthenticatedRequest {
   };
 }
 
-/**
- * Controlador de Tareas
- *
- * Gestiona las solicitudes HTTP para operaciones de gestión de tareas. Implementa endpoints RESTful
- * para operaciones CRUD con autenticación JWT.
- */
+interface StreamRequest extends AuthenticatedRequest {
+  on(event: 'data', listener: (chunk: Buffer) => void): void;
+  on(event: 'end', listener: () => void): void;
+  on(event: 'error', listener: (error: Error) => void): void;
+  pause(): void;
+  connection: { destroy(): void };
+  get(name: string): string | undefined;
+}
+
 @ApiTags('tasks')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('tasks')
 export class TasksController {
-  constructor(private readonly tasksService: TasksService) { }
+  // File validation constants
+  private readonly FILE_VALIDATION = {
+    MAX_SIZE_BYTES: 5 * 1024 * 1024, // 5MB
+    ALLOWED_MIMES: ['application/pdf', 'image/png', 'image/jpeg'] as const,
+    ALLOWED_EXTENSIONS: ['.pdf', '.png', '.jpg', '.jpeg'] as const,
+  } as const;
+
+  constructor(private readonly tasksService: TasksService) {}
+
+  /**
+   * Helper: Parse multipart form data to extract file buffer, filename and mimetype
+   */
+  private parseMultipartBuffer(
+    buffer: Buffer,
+  ): { fileBuffer: Buffer; filename: string; mimetype: string } {
+    const logger = new Logger('TasksController.parseMultipartBuffer');
+
+    // Extract headers: filename and content-type
+    const headerMatch = buffer
+      .toString('utf8')
+      .match(/filename="([^"]*)"[^\n]*\r?\nContent-Type: ([^\r\n]+)/);
+
+    if (!headerMatch) {
+      throw new BadRequestException(
+        'No se encontró información del archivo',
+      );
+    }
+
+    const [, filename, mimetype] = headerMatch;
+
+    // Validate MIME type
+    if (!this.FILE_VALIDATION.ALLOWED_MIMES.includes(mimetype as typeof this.FILE_VALIDATION.ALLOWED_MIMES[number])) {
+      throw new BadRequestException(
+        `Formato no permitido. Solo se permiten: PDF, PNG, JPG. Recibido: ${mimetype}`,
+      );
+    }
+
+    // Validate extension
+    const extension = filename
+      .toLowerCase()
+      .substring(filename.lastIndexOf('.'));
+
+    if (!this.FILE_VALIDATION.ALLOWED_EXTENSIONS.includes(extension as typeof this.FILE_VALIDATION.ALLOWED_EXTENSIONS[number])) {
+      throw new BadRequestException(
+        `Extensión no permitida: ${extension}`,
+      );
+    }
+
+    // Extract actual file content (without multipart headers)
+    const bodyMatch = buffer
+      .toString('binary')
+      .match(/\r?\n\r?\n([\s\S]*)\r?\n--/);
+
+    if (!bodyMatch) {
+      throw new BadRequestException('No se pudo procesar el archivo');
+    }
+
+    const fileBuffer = Buffer.from(bodyMatch[1], 'binary');
+
+    // Final size validation
+    if (fileBuffer.length > this.FILE_VALIDATION.MAX_SIZE_BYTES) {
+      throw new BadRequestException(
+        `Archivo demasiado grande: ${(
+          fileBuffer.length /
+          1024 /
+          1024
+        ).toFixed(2)}MB (máximo 5MB)`,
+      );
+    }
+
+    logger.debug(
+      `Parsed multipart: ${filename} (${fileBuffer.length} bytes, ${mimetype})`,
+    );
+
+    return { fileBuffer, filename, mimetype };
+  }
 
   /**
    * POST /tasks
@@ -307,41 +383,14 @@ export class TasksController {
 
   /**
    * POST /tasks/:id/upload
-   * Carga un archivo adjunto a una tarea.
-   * Solo soporta: PDF, PNG, JPG (máximo 5MB)
-   * El límite de tamaño se valida en Multer ANTES de cargar completamente
+   * Carga un archivo adjunto a una tarea usando streams puros.
+   * Valida tamaño, tipo MIME y extensión mientras se recibe.
    */
   @Post(':id/upload')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: memoryStorage(),
-      // Limitar a 5MB (5 * 1024 * 1024 bytes)
-      limits: {
-        fileSize: 5 * 1024 * 1024,
-      },
-      // Filtro de archivos permitidos
-      fileFilter: (req, file, callback) => {
-        const allowedMimes = ['application/pdf', 'image/png', 'image/jpeg'];
-        const allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg'];
-
-        const extension = file.originalname
-          .toLowerCase()
-          .substring(file.originalname.lastIndexOf('.'));
-
-        if (!allowedMimes.includes(file.mimetype) || !allowedExtensions.includes(extension)) {
-          callback(new BadRequestException(
-            `Formato no permitido. Solo se permiten: PDF, PNG, JPG. Recibido: ${file.mimetype}`
-          ), false);
-        } else {
-          callback(null, true);
-        }
-      },
-    }),
-  )
   @ApiOperation({
-    summary: 'Subir archivo adjunto a tarea',
+    summary: 'Subir archivo adjunto a tarea (streams)',
     description:
-      'Carga un archivo (PDF, PNG, JPG max 5MB) a una tarea. Almacenado en MinIO.',
+      'Carga un archivo (PDF, PNG, JPG max 5MB) usando streams puros. Más eficiente para archivos grandes.',
   })
   @ApiConsumes('multipart/form-data')
   @ApiParam({
@@ -385,7 +434,7 @@ export class TasksController {
   })
   @ApiResponse({
     status: 400,
-    description: 'Archivo no proporcionado o formato inválido',
+    description: 'Archivo inválido o formato no permitido',
   })
   @ApiResponse({
     status: 404,
@@ -397,32 +446,141 @@ export class TasksController {
   })
   async uploadFile(
     @Param('id') id: string,
-    @UploadedFile() file: Express.Multer.File | undefined,
-    @Request() req: AuthenticatedRequest,
+    @Request() req: StreamRequest,
   ): Promise<{
     success: boolean;
     message: string;
     file: { url: string; filename: string; size: number; mimetype: string };
   }> {
-    if (!file) {
-      throw new BadRequestException('No se proporcionó archivo');
-    }
+    const logger = new Logger('TasksController.uploadFile');
+    const taskId = +id;
 
     /**
-     * Validación adicional de tamaño (protección en dos niveles)
-     * Nivel 1: Express middleware (5MB)
-     * Nivel 2: Multer (5MB)
-     * Nivel 3: Esta validación explícita
+     * Extraer información del request
      */
-    const MAX_SIZE_MB = 5;
-    const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+    const contentType = req.get('content-type');
+    const contentLength = req.get('content-length');
 
-    if (file.size > MAX_SIZE_BYTES) {
+    // Validar Content-Type
+    if (!contentType?.startsWith('multipart/form-data')) {
       throw new BadRequestException(
-        `Archivo demasiado grande: ${(file.size / 1024 / 1024).toFixed(2)}MB (máximo ${MAX_SIZE_MB}MB)`,
+        'Content-Type debe ser multipart/form-data',
       );
     }
 
-    return await this.tasksService.uploadFile(+id, file, req.user.id);
+    // Validar Content-Length (primera capa)
+    if (contentLength && parseInt(contentLength) > this.FILE_VALIDATION.MAX_SIZE_BYTES) {
+      throw new BadRequestException(
+        `Archivo demasiado grande: ${(
+          parseInt(contentLength) /
+          1024 /
+          1024
+        ).toFixed(2)}MB (máximo 5MB)`,
+      );
+    }
+
+    return new Promise((resolve, reject) => {
+      let totalSize = 0;
+      let filename = '';
+      let mimetype = '';
+      const chunks: Buffer[] = [];
+
+      /**
+       * Procesar el stream del request
+       */
+
+      req.on('data', (chunk: Buffer) => {
+        totalSize += chunk.length;
+
+        // Validar tamaño mientras se recibe (segunda capa)
+        if (totalSize > this.FILE_VALIDATION.MAX_SIZE_BYTES) {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+          req.pause();
+
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          req.connection.destroy();
+
+          logger.warn(
+            `Upload rechazado: archivo excede 5MB (${(
+              totalSize /
+              1024 /
+              1024
+            ).toFixed(2)}MB)`,
+          );
+
+          reject(
+            new BadRequestException(
+              `Archivo demasiado grande: ${(totalSize / 1024 / 1024).toFixed(
+                2,
+              )}MB (máximo 5MB)`,
+            ),
+          );
+          return;
+        }
+
+        chunks.push(chunk);
+      });
+
+      /**
+       * Cuando termina el stream
+       */
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+      req.on('end', () => {
+        // Handle async operations without async in callback
+        (async () => {
+          try {
+            const buffer = Buffer.concat(chunks);
+
+            // Use helper to parse multipart and extract file data
+            const { fileBuffer, filename: parsedFilename, mimetype: parsedMimetype } =
+              this.parseMultipartBuffer(buffer);
+
+            // Rename for clarity in this scope
+            filename = parsedFilename;
+            mimetype = parsedMimetype;
+
+          // Convertir a stream y subir
+          const fileStream = Readable.from(fileBuffer);
+
+          const result = await this.tasksService.uploadFileStream(
+            taskId,
+            fileStream,
+            filename,
+            mimetype,
+            req.user.id,
+          );
+
+          logger.log(
+            `Archivo subido exitosamente: ${filename} (${fileBuffer.length} bytes)`,
+          );
+
+          resolve({
+            success: true,
+            message: 'Archivo cargado exitosamente',
+            file: {
+              url: result.url,
+              filename: result.filename,
+              size: fileBuffer.length,
+              mimetype,
+            },
+          });
+        } catch (error) {
+          logger.error(`Error al procesar upload: ${error}`);
+          reject(error instanceof Error ? error : new Error(String(error)));
+        }
+        })();
+      });
+
+      /**
+       * Manejar errores del stream
+       */
+
+      req.on('error', (error: Error) => {
+        logger.error(`Error en stream: ${error.message}`);
+        reject(
+          new BadRequestException(`Error al recibir archivo: ${error.message}`),
+        );
+      });
+    });
   }
 }
