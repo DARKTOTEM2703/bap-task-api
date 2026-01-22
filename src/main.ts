@@ -1,10 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
 
   // ✅ AGREGAR CORS CONFIGURATION
   app.enableCors({
@@ -37,8 +38,12 @@ async function bootstrap() {
     }),
   );
 
-  const port = process.env.PORT || 3000;
+  const port = Number(process.env.PORT);
   await app.listen(port);
-  console.log(`🚀 Application running on http://localhost:${port}`);
+
+  logger.log(`🚀 Application running on http://localhost:${port}`);
+  logger.log(
+    `📚 Swagger documentation available at http://localhost:${port}/api`,
+  );
 }
 void bootstrap();

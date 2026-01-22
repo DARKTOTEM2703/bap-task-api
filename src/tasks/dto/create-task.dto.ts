@@ -22,112 +22,154 @@ export class CreateTaskDto {
   /**
    * Título de la tarea (requerido)
    * Debe tener entre 3 y 200 caracteres
+   * Aparecerá en listados y búsquedas
    */
   @ApiProperty({
-    example: 'Terminar documentación',
     description: 'Título descriptivo de la tarea',
+    example: 'Terminar documentación del API',
+    type: String,
     minLength: 3,
     maxLength: 200,
+    required: true,
   })
   @IsString()
-  @IsNotEmpty()
-  @MinLength(3)
-  @MaxLength(200)
+  @IsNotEmpty({ message: 'El título es requerido' })
+  @MinLength(3, { message: 'El título debe tener al menos 3 caracteres' })
+  @MaxLength(200, { message: 'El título no puede exceder 200 caracteres' })
   title: string;
 
   /**
    * Descripción de la tarea (requerida)
    * Debe tener entre 10 y 2000 caracteres
+   * Incluye detalles completos sobre qué se debe hacer
    */
   @ApiProperty({
-    example: 'Completar toda la documentación del API incluyendo ejemplos',
-    description: 'Descripción detallada de la tarea',
+    description:
+      'Descripción detallada de la tarea con instrucciones específicas',
+    example:
+      'Completar toda la documentación del API incluyendo ejemplos de uso, casos de error y mejores prácticas',
+    type: String,
     minLength: 10,
     maxLength: 2000,
+    required: true,
   })
   @IsString()
-  @IsNotEmpty()
-  @MinLength(10)
-  @MaxLength(2000)
+  @IsNotEmpty({ message: 'La descripción es requerida' })
+  @MinLength(10, {
+    message: 'La descripción debe tener al menos 10 caracteres',
+  })
+  @MaxLength(2000, {
+    message: 'La descripción no puede exceder 2000 caracteres',
+  })
   description: string;
 
   /**
    * Fecha de entrega (requerida)
    * Formato: ISO 8601 (ej: 2026-02-15T12:00:00Z)
+   * Define el deadline para completar la tarea
    */
   @ApiProperty({
+    description: 'Fecha y hora límite de entrega (formato ISO 8601)',
     example: '2026-02-15T12:00:00Z',
-    description: 'Fecha y hora de entrega en formato ISO 8601',
+    type: String,
+    format: 'date-time',
+    required: true,
   })
-  @IsDateString()
-  @IsNotEmpty()
+  @IsDateString(
+    {},
+    { message: 'Debe proporcionar una fecha válida en formato ISO 8601' },
+  )
+  @IsNotEmpty({ message: 'La fecha de entrega es requerida' })
   deliveryDate: string;
 
   /**
    * Estado de la tarea (opcional)
-   * Valores: PENDING, IN_PROGRESS, DONE
+   * Valores permitidos: OPEN, PENDING, IN_PROGRESS, DONE
+   * Por defecto se asigna PENDING al crear
    */
   @ApiProperty({
+    description: 'Estado actual del ciclo de vida de la tarea',
     enum: TaskStatus,
-    example: 'PENDING',
-    description: 'Estado actual de la tarea',
+    example: TaskStatus.PENDING,
+    default: TaskStatus.PENDING,
     required: false,
   })
-  @IsEnum(TaskStatus)
+  @IsEnum(TaskStatus, {
+    message: 'El estado debe ser: OPEN, PENDING, IN_PROGRESS o DONE',
+  })
   @IsOptional()
   status?: TaskStatus;
 
   /**
-   * Comentarios sobre la tarea (opcional)
+   * Comentarios adicionales sobre la tarea (opcional)
+   * Útil para notas, aclaraciones o contexto extra
+   * Máximo 1000 caracteres
    */
   @ApiProperty({
-    example: 'Revisar con el equipo antes de finalizar',
-    description: 'Comentarios adicionales',
+    description: 'Comentarios adicionales, notas o aclaraciones sobre la tarea',
+    example:
+      'Revisar con el equipo de QA antes de finalizar. Requiere aprobación del líder técnico.',
+    type: String,
+    maxLength: 1000,
     required: false,
   })
   @IsString()
   @IsOptional()
-  @MaxLength(1000)
+  @MaxLength(1000, {
+    message: 'Los comentarios no pueden exceder 1000 caracteres',
+  })
   comments?: string;
 
   /**
-   * Persona responsable (opcional)
+   * Persona responsable de ejecutar la tarea (opcional)
+   * Nombre completo del responsable asignado
    */
   @ApiProperty({
+    description: 'Nombre completo de la persona asignada como responsable',
     example: 'Juan Pérez',
-    description: 'Nombre de la persona responsable',
+    type: String,
+    maxLength: 100,
     required: false,
   })
   @IsString()
   @IsOptional()
-  @MaxLength(100)
+  @MaxLength(100, {
+    message: 'El nombre del responsable no puede exceder 100 caracteres',
+  })
   responsible?: string;
 
   /**
-   * Tags/etiquetas (opcional)
+   * Tags/etiquetas para categorización (opcional)
+   * Permite filtrar y organizar tareas por categorías
+   * Se puede asignar múltiples etiquetas
    */
   @ApiProperty({
-    example: ['backend', 'documentación'],
-    description: 'Array de etiquetas para categorizar',
+    description: 'Array de etiquetas para categorizar y filtrar tareas',
+    example: ['backend', 'documentación', 'prioritaria'],
+    type: [String],
+    isArray: true,
     required: false,
   })
-  @IsArray()
-  @IsString({ each: true })
+  @IsArray({ message: 'Las tags deben ser un array' })
+  @IsString({ each: true, message: 'Cada tag debe ser un texto' })
   @IsOptional()
   tags?: string[];
 
   /**
-   * ¿Es una tarea pública? (opcional)
-   * Si es true, otros usuarios pueden verla, editarla y eliminarla
-   * Si es false, solo el propietario puede acceder
+   * Indicador de visibilidad pública (opcional)
+   * - true: La tarea es visible, editable y eliminable por cualquier usuario autenticado
+   * - false: Solo el propietario puede ver, editar y eliminar la tarea (privada)
+   * Por defecto es false (privada)
    */
   @ApiProperty({
-    example: false,
     description:
-      'Si es true, la tarea es visible para todos. Si es false, solo el propietario la ve.',
+      'Define si la tarea es pública (todos pueden acceder) o privada (solo el propietario)',
+    example: false,
+    type: Boolean,
+    default: false,
     required: false,
   })
-  @IsBoolean()
+  @IsBoolean({ message: 'isPublic debe ser un valor booleano (true/false)' })
   @IsOptional()
   isPublic?: boolean;
 }
